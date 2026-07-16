@@ -34,9 +34,12 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 · Vercel AI SDK (`ai` v7) · Firecrawl crawler (fetch+readability fallback) · reports HTML/PDF(@react-pdf)/Excel(exceljs).
 
 ## Phases
-0. **Setup + Supabase** ← DONE (scaffold, deps, theme, env, green build)
-1. **Port `lib/geo` + Supabase Auth + schema/migrations + landing + Configure** ← DONE
-2. GEO Assistant: Agent-Mode streaming chat + MCP page (tool-call cards, model selector) ← NEXT
+0. **Setup + Supabase** ← DONE
+1. **Port `lib/geo` + Auth + schema/RLS + landing + Configure** ← DONE
+2. **GEO Assistant: Agent-Mode streaming chat + MCP page** ← DONE
+3. **Crawl + plan engine (`plan.ts`+`projectImpact`) + cards 1–4 + reports** ← DONE
+4. Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted) ← NEXT
+5. Dashboard (KPIs, trend, leaderboard, active plan/progress, downloads) ← NEXT
 3. Crawling + scoring engine (`plan.ts` allocator + `projectImpact`) + cards 1–4 + reports (PDF/Excel/HTML) — **unit tests required**
 4. Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted-stored)
 5. Dashboard (KPIs, trend, leaderboard, active plan/progress, alerts, downloads)
@@ -84,7 +87,27 @@ suggest/discover (our-key Claude); #5 googleSuggest 3s timeout.
 observability/logger (dropped in port — currently errors only surface as client toasts);
 #8 when `SupabaseGeoStore` uses the Drizzle service client (RLS bypass), always scope by user_id.
 
-## Next: Phase 2 — GEO Assistant
-Vercel AI SDK streaming chat calling `lib/geo` tools (tool-call cards, model selector) + MCP page.
-Will need a Supabase-backed GeoStore (implement `SupabaseGeoStore` when real runs get persisted) and the
-BENCHMARK card wired to `InProcessPanelRunner` with `serverProviderKeys()`.
+## Phase 2/3 state (DONE)
+- **Agent Mode** (`/assistant`): AI SDK v7 `streamText` at `/api/chat` with 6 tools —
+  get_active_config, run_benchmark (Card 1), diagnose_citations (Card 2), build_plan (Card 3),
+  track_progress (Card 4). `useChat` streaming UI, model selector (Haiku/Sonnet/Opus), tool-call
+  cards with specialized result renderers (BenchmarkResult/DiagnoseResult/PlanResult/TrackResult),
+  4 multi-select starter cards, MCP tab.
+- **Persistence:** `SupabaseGeoStore` (runs/answers/sov_history), `plans` (savePlan/getLatestPlan/getPlanById).
+- **Engine (`lib/geo/plan.ts` + `tactics.ts`):** categorizeSource, buildCitationProfile, computeGap,
+  **allocatePlan** (greedy knapsack, gap-first, budget+person-hours), **projectImpact** (modeled, confidence
+  high only if GSC+crawl grounded, assumptions always listed, capped). Worked example 5%→~22% reproduced.
+  **13 engine unit tests** + robots (4) + scoring/runner (7) = **24 passing**.
+- **Crawl (`lib/geo/crawl.ts`):** Firecrawl → fetch/readability fallback, robots.txt honored
+  (`robots.ts`, tested), per-host rate limit. `diagnose.ts` turns cited domains → profiles+gap.
+- **Reports:** `/api/report/plan/[planId]?format=html|pdf|xlsx` — HTML (`plan-report.ts`), Excel (exceljs),
+  PDF (`plan-pdf.tsx`, @react-pdf). Download chips in PlanResult.
+- **AI SDK v7 notes:** `convertToModelMessages` is async (await it); `tool({inputSchema})`;
+  `stopWhen: stepCountIs(n)`; client `useChat` from `@ai-sdk/react`, model passed per-send via
+  `sendMessage({text},{body:{model}})`; message parts `type: "tool-<name>"` / `"dynamic-tool"`.
+
+## Next: Phase 4 (Self Serve BYOK) + Phase 5 (Dashboard)
+- Phase 4: Configure Platform sub-tab (Trust-us BYOK: session localStorage keys sent per-request vs opt-in
+  AES-GCM stored in `api_keys` using `KEY_ENCRYPTION_SECRET`; Own instance + Code base deploy steps).
+- Phase 5: Dashboard from `sov_history`/`plans`/`reports` (KPI cards + deltas, SoV trend (Recharts),
+  competitor leaderboard, active plan % complete, recent reports, config summary, empty-state).

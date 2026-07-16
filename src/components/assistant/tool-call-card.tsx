@@ -4,11 +4,39 @@ import { useState } from "react";
 import { Loader2, Check, AlertTriangle, ChevronDown, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BenchmarkResult, type BenchmarkOutput } from "./benchmark-result";
+import {
+  DiagnoseResult,
+  PlanResult,
+  TrackResult,
+  type DiagnoseOutput,
+  type PlanOutput,
+  type TrackOutput,
+} from "./result-cards";
 
 const TOOL_LABELS: Record<string, string> = {
   get_active_config: "Loading your config",
   run_benchmark: "Running AI panel benchmark",
+  diagnose_citations: "Diagnosing citation gaps",
+  build_plan: "Building your costed plan",
+  track_progress: "Tracking plan progress",
 };
+
+const SPECIAL_RENDER = new Set(["run_benchmark", "diagnose_citations", "build_plan", "track_progress"]);
+
+function renderResult(name: string, output: unknown): React.ReactNode {
+  switch (name) {
+    case "run_benchmark":
+      return <BenchmarkResult data={output as BenchmarkOutput} />;
+    case "diagnose_citations":
+      return <DiagnoseResult data={output as DiagnoseOutput} />;
+    case "build_plan":
+      return <PlanResult data={output as PlanOutput} />;
+    case "track_progress":
+      return <TrackResult data={output as TrackOutput} />;
+    default:
+      return null;
+  }
+}
 
 interface ToolPart {
   type: string; // "tool-run_benchmark" | "dynamic-tool" ...
@@ -33,13 +61,12 @@ export function ToolCallCard({ part }: { part: ToolPart }) {
   const errored = state === "output-error";
   const [open, setOpen] = useState(false);
 
-  const isBenchmark = name === "run_benchmark" && state === "output-available";
-  const benchmarkErr = Boolean(
-    isBenchmark &&
-      part.output &&
-      typeof part.output === "object" &&
-      "error" in (part.output as object),
+  const hasOutput = state === "output-available";
+  const isSpecial = SPECIAL_RENDER.has(name) && hasOutput;
+  const outputErr = Boolean(
+    isSpecial && part.output && typeof part.output === "object" && "error" in (part.output as object),
   );
+  const showSpecial = isSpecial && !outputErr;
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-border bg-card/60">
@@ -68,13 +95,11 @@ export function ToolCallCard({ part }: { part: ToolPart }) {
         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
 
-      {/* Specialized benchmark result (always shown when available & not an error) */}
-      {isBenchmark && !benchmarkErr && (
-        <div className="border-t border-border px-3.5 py-3">
-          <BenchmarkResult data={part.output as BenchmarkOutput} />
-        </div>
+      {/* Specialized result (shown when available & not an error) */}
+      {showSpecial && (
+        <div className="border-t border-border px-3.5 py-3">{renderResult(name, part.output)}</div>
       )}
-      {benchmarkErr && (
+      {outputErr && (
         <div className="border-t border-border px-3.5 py-2.5 text-sm text-warning">
           {(part.output as { error: string }).error}
         </div>
@@ -82,10 +107,8 @@ export function ToolCallCard({ part }: { part: ToolPart }) {
 
       {open && (
         <div className="border-t border-border bg-background/40 px-3.5 py-2.5">
-          {part.input != null && (
-            <Detail title="input" value={part.input} />
-          )}
-          {part.output != null && !isBenchmark && <Detail title="output" value={part.output} />}
+          {part.input != null && <Detail title="input" value={part.input} />}
+          {part.output != null && !showSpecial && <Detail title="output" value={part.output} />}
           {part.errorText && <div className="text-xs text-danger">{part.errorText}</div>}
         </div>
       )}

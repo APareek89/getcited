@@ -57,6 +57,30 @@ export {
 } from "./store";
 export { MemoryGeoStore } from "./memory-store";
 export { buildReport, type FullReport } from "./report";
-// NOTE: `./keys` is server-only — import it directly from "@/lib/geo/keys" in server
-// code. It is intentionally NOT re-exported here so client components can import
-// types/pure helpers from "@/lib/geo" without pulling in server-only modules.
+// Pure scoring engine (spec §4) — safe for client + server.
+export * from "./tactics";
+export {
+  categorizeSource,
+  buildCitationProfile,
+  emptyProfile,
+  computeGap,
+  allocatePlan,
+  projectImpact,
+  PRODUCTIVE_HOURS_PER_WEEK,
+  LIFT_TO_SHARE,
+  MAX_SHARE_GAIN,
+  SHARE_CAP,
+  DEFAULT_ASSUMPTIONS,
+  type CitationProfile,
+  type Gap,
+  type AllocateInput,
+  type ChosenTactic,
+  type AllocationResult,
+  type Confidence,
+  type Grounding,
+  type ProjectImpactInput,
+  type Projection,
+} from "./plan";
+// NOTE: `./keys`, `./crawl`, `./assist`, `./agent` are server-only — import them
+// directly (e.g. "@/lib/geo/crawl") in server code. They are intentionally NOT
+// re-exported here so client components can import from "@/lib/geo" safely.
