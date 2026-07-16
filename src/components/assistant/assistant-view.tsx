@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ToolCallCard } from "./tool-call-card";
 import { McpPanel } from "./mcp-panel";
+import { getSessionKeys } from "@/lib/session-keys";
 
 const AGENT_MODELS = [
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 · fast" },
@@ -79,8 +80,12 @@ export function AssistantView() {
   function send(text: string) {
     const t = text.trim();
     if (!t || busy) return;
-    // Pass the selected agent model per-send (server reads body.model).
-    sendMessage({ text: t }, { body: { model } });
+    // Pass the selected agent model + any Self Serve SESSION keys (localStorage,
+    // never persisted server-side) per-send. The server only uses them if present.
+    const sessionKeys = getSessionKeys();
+    const body: Record<string, unknown> = { model };
+    if (Object.keys(sessionKeys).length > 0) body.keys = sessionKeys;
+    sendMessage({ text: t }, { body });
     setInput("");
     setSelected(new Set());
   }

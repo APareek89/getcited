@@ -38,8 +38,11 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 1. **Port `lib/geo` + Auth + schema/RLS + landing + Configure** ← DONE
 2. **GEO Assistant: Agent-Mode streaming chat + MCP page** ← DONE
 3. **Crawl + plan engine (`plan.ts`+`projectImpact`) + cards 1–4 + reports** ← DONE
-4. Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted) ← NEXT
-5. Dashboard (KPIs, trend, leaderboard, active plan/progress, downloads) ← NEXT
+4. **Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted)** ← DONE
+5. **Dashboard (KPIs, trend, leaderboard, active plan/progress, downloads)** ← DONE
+
+> **First full version COMPLETE** (all 6 phases). Landing → auth → Configure (+Self Serve) →
+> Agent Mode (4 cards, streaming, reports) → Dashboard. All green.
 3. Crawling + scoring engine (`plan.ts` allocator + `projectImpact`) + cards 1–4 + reports (PDF/Excel/HTML) — **unit tests required**
 4. Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted-stored)
 5. Dashboard (KPIs, trend, leaderboard, active plan/progress, alerts, downloads)
@@ -106,8 +109,20 @@ observability/logger (dropped in port — currently errors only surface as clien
   `stopWhen: stepCountIs(n)`; client `useChat` from `@ai-sdk/react`, model passed per-send via
   `sendMessage({text},{body:{model}})`; message parts `type: "tool-<name>"` / `"dynamic-tool"`.
 
-## Next: Phase 4 (Self Serve BYOK) + Phase 5 (Dashboard)
-- Phase 4: Configure Platform sub-tab (Trust-us BYOK: session localStorage keys sent per-request vs opt-in
-  AES-GCM stored in `api_keys` using `KEY_ENCRYPTION_SECRET`; Own instance + Code base deploy steps).
-- Phase 5: Dashboard from `sov_history`/`plans`/`reports` (KPI cards + deltas, SoV trend (Recharts),
-  competitor leaderboard, active plan % complete, recent reports, config summary, empty-state).
+## Phase 4/5 state (DONE)
+- **Self Serve (Phase 4):** `ConfigurePlatform` on /configure — mode toggle (We Serve/Self Serve) +
+  3 options. BYOK: session keys (`lib/session-keys.ts`, localStorage, sent per-request via chat body,
+  never persisted) OR opt-in encrypted storage (AES-GCM `lib/crypto.ts` → `api_keys` via
+  `lib/db/api-keys.ts`, verified round-trip + tamper reject). `/api/chat` `resolveKeys`: session →
+  stored → We Serve (Self Serve never falls back to our keys). Own-instance + Code-base = deploy docs.
+  Server actions: saveMode/storeKey/deleteKey/listStoredKeys.
+- **Dashboard (Phase 5):** `/dashboard` from `lib/db/dashboard.ts` — KPI cards (SoV + delta vs prev run,
+  citation share, sentiment, hallucinations), SoV trend (`SovTrendChart` Recharts line), competitor
+  leaderboard (CSS bars), active plan (current→target + download chips), recent reports, config summary
+  chips, empty-state → "Run your first benchmark".
+
+## Possible follow-ups (not blocking v1)
+- Real hosted MCP endpoint (`/api/mcp`); GSC/GA4/YouTube/Ahrefs integrations to raise projection confidence.
+- Persist `citation_share` in sov_history; store report artifacts in Supabase Storage (currently on-demand).
+- Interactive end-to-end verification needs sign-in + spends on Claude (paid) — not run during build.
+- FMEA P2s (mock-audit rate limit, server logger) — deferred per user "P0-only" preference.

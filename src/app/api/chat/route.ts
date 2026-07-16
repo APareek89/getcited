@@ -19,8 +19,26 @@ import {
   type FullReport,
 } from "@/lib/geo";
 import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
+import { getStoredProviderKeys } from "@/lib/db/api-keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
 import { AGENT_SYSTEM_PROMPT, DEFAULT_AGENT_MODEL, isAgentModel } from "@/lib/geo/agent";
+
+/**
+ * Resolve which provider keys a run uses:
+ *  - Self Serve session keys (sent per-request, never persisted) take precedence,
+ *  - else Self Serve stored (encrypted) keys,
+ *  - else We Serve (our server env keys).
+ * Self Serve NEVER falls back to our keys.
+ */
+async function resolveKeys(
+  session: Partial<ProviderKeys> | undefined,
+  mode: string | undefined,
+): Promise<ProviderKeys> {
+  const hasSession = session && (session.anthropic || session.perplexity || session.gemini || session.groq);
+  if (hasSession) return { ...session };
+  if (mode === "self_serve") return getStoredProviderKeys();
+  return serverProviderKeys();
+}
 
 export const maxDuration = 300;
 
@@ -69,12 +87,22 @@ async function reportById(
 
 export async function POST(req: Request) {
   const user = await requireUser();
-  const body = (await req.json()) as { messages: UIMessage[]; model?: string };
+  const body = (await req.json()) as {
+    messages: UIMessage[];
+    model?: string;
+    keys?: Partial<ProviderKeys>;
+  };
   const modelId = body.model && isAgentModel(body.model) ? body.model : DEFAULT_AGENT_MODEL;
 
-  const keys = serverProviderKeys();
+  const cfgForKeys = await getActiveConfig();
+  const keys = await resolveKeys(body.keys, cfgForKeys?.mode);
   if (!keys.anthropic) {
-    return new Response("Anthropic key not configured on the server", { status: 500 });
+    return new Response(
+      cfgForKeys?.mode === "self_serve"
+        ? "No Anthropic key. Add your key under Configure → Platform (Self Serve)."
+        : "Anthropic key not configured on the server",
+      { status: 400 },
+    );
   }
   const anthropic = createAnthropic({ apiKey: keys.anthropic });
 

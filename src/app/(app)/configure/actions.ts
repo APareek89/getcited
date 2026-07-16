@@ -3,9 +3,16 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { saveConfigVersion, type ConfigView } from "@/lib/db/configs";
+import { saveConfigVersion, getActiveConfig, type ConfigView } from "@/lib/db/configs";
 import { serverProviderKeys } from "@/lib/geo/keys";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  storeEncryptedKey,
+  deleteStoredKey,
+  listStoredProviders,
+  type KeyProvider,
+} from "@/lib/db/api-keys";
+import { createServerSupabase } from "@/lib/supabase/server";
 import {
   suggestQueries,
   discoverCompetitors,
@@ -132,5 +139,62 @@ export async function discoverCompetitorsAction(
     return { ok: true, data: competitors };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not discover competitors" };
+  }
+}
+
+// ── Self Serve (Phase 4) ─────────────────────────────────────────────────────
+
+const ModeSchema = z.enum(["we_serve", "self_serve"]);
+
+/** Switch We Serve / Self Serve on the active config (in place, no new version). */
+export async function saveModeAction(mode: string): Promise<ActionResult<{ mode: string }>> {
+  await requireUser("/configure");
+  const parsed = ModeSchema.safeParse(mode);
+  if (!parsed.success) return { ok: false, error: "Invalid mode" };
+  const cfg = await getActiveConfig();
+  if (!cfg) return { ok: false, error: "Save your config first." };
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from("configs").update({ mode: parsed.data }).eq("id", cfg.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/configure");
+  return { ok: true, data: { mode: parsed.data } };
+}
+
+const StoreKeySchema = z.object({
+  provider: z.enum(["anthropic", "perplexity", "gemini", "groq"]),
+  key: z.string().trim().min(8).max(400),
+});
+
+/** Store an encrypted BYO key (opt-in). The plaintext is encrypted, never persisted raw. */
+export async function storeKeyAction(
+  raw: z.input<typeof StoreKeySchema>,
+): Promise<ActionResult<{ provider: KeyProvider }>> {
+  const user = await requireUser("/configure");
+  const parsed = StoreKeySchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: "Enter a valid key" };
+  try {
+    await storeEncryptedKey(user.id, parsed.data.provider, parsed.data.key);
+    revalidatePath("/configure");
+    return { ok: true, data: { provider: parsed.data.provider } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not store key" };
+  }
+}
+
+export async function deleteKeyAction(provider: string): Promise<ActionResult<null>> {
+  await requireUser("/configure");
+  const parsed = z.enum(["anthropic", "perplexity", "gemini", "groq"]).safeParse(provider);
+  if (!parsed.success) return { ok: false, error: "Invalid provider" };
+  await deleteStoredKey(parsed.data);
+  revalidatePath("/configure");
+  return { ok: true, data: null };
+}
+
+export async function listStoredKeysAction(): Promise<ActionResult<KeyProvider[]>> {
+  await requireUser("/configure");
+  try {
+    return { ok: true, data: await listStoredProviders() };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not list keys" };
   }
 }
