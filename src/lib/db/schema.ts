@@ -213,6 +213,28 @@ export const reports = pgTable(
   (t) => [index("reports_user_created_idx").on(t.userId, t.createdAt)],
 );
 
+// ── MCP OAuth (self-hosted authorization server; ported from geo-radar-mcp) ──
+// Pre-auth tables: RLS is enabled with NO policies (deny-all for anon/authed);
+// only the server-side Drizzle service client touches them. DB-backed (not
+// in-memory like geo-radar) so DCR clients + codes survive serverless restarts.
+export const mcpOauthClients = pgTable("mcp_oauth_clients", {
+  clientId: text("client_id").primaryKey(),
+  name: text("name"),
+  redirectUris: text("redirect_uris").array().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mcpOauthCodes = pgTable("mcp_oauth_codes", {
+  code: text("code").primaryKey(),
+  clientId: text("client_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  scopes: text("scopes").array().notNull().default([]),
+  resource: text("resource"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type ConfigRow = typeof configs.$inferSelect;
 export type ConfigInsert = typeof configs.$inferInsert;

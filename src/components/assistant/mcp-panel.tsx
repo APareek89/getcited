@@ -1,24 +1,32 @@
 "use client";
 
-import { Plug, Terminal } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plug, Terminal, ShieldCheck, Copy, Check } from "lucide-react";
 
 const TOOLS = [
+  { name: "ping", desc: "Health check — verifies the connector is wired and authenticated." },
   { name: "get_active_config", desc: "Load your saved brand, competitors, queries, budget and team." },
-  { name: "run_benchmark", desc: "Run an AI panel → share-of-voice, citation share, sentiment." },
-  { name: "diagnose_citations", desc: "Crawl + categorize competitor citations (coming in Plan phase)." },
-  { name: "build_plan", desc: "Costed action plan + modeled projection (coming in Plan phase)." },
+  { name: "run_benchmark", desc: "Run an AI panel → share-of-voice, citation share, sentiment. Costs a few cents (capped)." },
+  { name: "get_report", desc: "Fetch a previous benchmark report by report_id." },
+  { name: "build_plan", desc: "Costed action plan + modeled projection (assumptions listed, never a guarantee)." },
 ];
 
-const CONFIG_EXAMPLE = `{
-  "mcpServers": {
-    "getcited": {
-      "url": "https://<your-getcited-host>/api/mcp",
-      "headers": { "Authorization": "Bearer <your-token>" }
-    }
-  }
-}`;
-
 export function McpPanel() {
+  const [origin, setOrigin] = useState("https://<your-getcited-host>");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(window.location.origin);
+  }, []);
+  const mcpUrl = `${origin}/api/mcp`;
+
+  function copy() {
+    navigator.clipboard.writeText(mcpUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6 md:p-10">
       <div className="flex items-center gap-3">
@@ -26,16 +34,56 @@ export function McpPanel() {
           <Plug className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">MCP endpoint</h1>
+          <h1 className="text-xl font-semibold tracking-tight">MCP connector</h1>
           <p className="text-sm text-muted-foreground">
-            Optional — drive GetCited from Claude Desktop, Cursor, or any MCP client.
+            Drive GetCited from Claude (web/desktop), Cursor, or any MCP client — with OAuth.
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-        The hosted MCP endpoint ships after the web app is complete. The tools below are the
-        same ones the in-app GEO Assistant already calls.
+      <section>
+        <h2 className="mb-2 text-sm font-medium">Server URL</h2>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 truncate rounded-lg border border-border bg-card px-3 py-2 text-xs text-primary">
+            {mcpUrl}
+          </code>
+          <button
+            type="button"
+            onClick={copy}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs hover:bg-secondary"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-positive" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-medium">Install in Claude</h2>
+        <ol className="ml-4 list-decimal space-y-1.5 text-sm text-muted-foreground">
+          <li>
+            Claude → <span className="text-foreground">Settings → Connectors → Add custom connector</span>
+          </li>
+          <li>Paste the server URL above.</li>
+          <li>
+            Claude opens the authorization page — sign in with your <span className="text-foreground">GetCited account</span>{" "}
+            (the connector then acts on <em>your</em> configs, runs and plans only).
+          </li>
+          <li>
+            Ask Claude: <span className="text-foreground">&quot;Run a GetCited benchmark&quot;</span>.
+          </li>
+        </ol>
+      </section>
+
+      <div className="flex items-start gap-2 rounded-lg border border-positive/20 bg-positive/5 p-3 text-xs text-muted-foreground">
+        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-positive" />
+        <span>
+          Auth is OAuth 2.0 with PKCE (dynamic client registration) — this app is its own
+          authorization server; tokens are signed JWTs bound to your user id, expire in 7 days,
+          and are only accepted by this deployment. Note: Claude&apos;s hosted connectors need a
+          public HTTPS URL — deploy first (or tunnel) for claude.ai; localhost works for local
+          MCP clients.
+        </span>
       </div>
 
       <section>
@@ -52,11 +100,13 @@ export function McpPanel() {
 
       <section>
         <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-          <Terminal className="h-3.5 w-3.5" /> Client config (example)
+          <Terminal className="h-3.5 w-3.5" /> Scripted access (optional)
         </h2>
-        <pre className="overflow-auto rounded-lg border border-border bg-card p-3 text-[11px] leading-relaxed text-muted-foreground">
-          {CONFIG_EXAMPLE}
-        </pre>
+        <p className="text-xs text-muted-foreground">
+          For CI/scripts, set <code className="text-primary">MCP_API_KEY</code> in the server env and send{" "}
+          <code className="text-primary">Authorization: Bearer &lt;key&gt;</code> — note API-key calls have
+          no user context (user-scoped tools will ask you to use OAuth).
+        </p>
       </section>
     </div>
   );

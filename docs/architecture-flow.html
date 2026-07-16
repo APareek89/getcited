@@ -1,0 +1,137 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Architecture Flow</title>
+<style>
+ body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:1100px;margin:0 auto;padding:24px 20px 80px;color:#1f2937;background:#fafafa}
+ h1{border-bottom:2px solid #e5e7eb;padding-bottom:8px}
+ h2{margin-top:36px;border-top:1px solid #e5e7eb;padding-top:18px;color:#111827}
+ pre.mermaid{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:14px 0 28px;overflow:auto;text-align:center}
+ .hint{position:sticky;top:0;background:#fff8e1;border:1px solid #f0d264;border-radius:6px;padding:8px 12px;font-size:13px;color:#5a4a00;margin-bottom:16px}
+ .mermaid svg{max-width:100%;height:auto}
+</style></head><body>
+<div class="hint">Tip: use Ctrl/Cmd + scroll or browser zoom to enlarge a diagram.</div>
+<h1>Architecture Flow</h1>
+<h2>GetCited — MASTER FLOW</h2>
+<pre class="mermaid">%% GetCited — MASTER FLOW
+%% current as of MCP wiring (all 6 phases built). MCP connector detail: see 01-mcp-auth-flow.mmd
+flowchart TD
+  U["User (signed in)&lt;br/&gt;[DATA · Supabase auth.users]&lt;br/&gt;in: email/Google login&lt;br/&gt;out: user_id"]:::data
+  MCPC["MCP connector (Claude etc.)&lt;br/&gt;[FUNCTION · api/mcp, OAuth+PKCE, JWT sub=user_id]&lt;br/&gt;see diagram 01"]:::fn
+
+  CFG["Configure page&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: brand URL, competitors x5, budget, team size&lt;br/&gt;out: versioned config row"]:::fn
+  CFGDB["configs&lt;br/&gt;[DATA · Supabase/Drizzle, RLS by user_id]&lt;br/&gt;in: config fields + version&lt;br/&gt;out: latest config"]:::data
+  SUG["suggest_queries&lt;br/&gt;[AGENT · Claude]&lt;br/&gt;in: brand + description (+Google Suggest/Perplexity)&lt;br/&gt;out: editable buyer-intent prompts"]:::agent
+  DISC["discover_competitors&lt;br/&gt;[AGENT · Claude]&lt;br/&gt;in: brand URL&lt;br/&gt;out: suggested competitor URLs"]:::agent
+
+  CARDS{"Agent Mode card chosen?&lt;br/&gt;[FUNCTION decides route]"}:::dec
+
+  BENCH["Card 1 Benchmark&lt;br/&gt;[FUNCTION → pipeline]&lt;br/&gt;in: config&lt;br/&gt;out: SoV + citations + sentiment"]:::fn
+  DIAG["Card 2 Diagnose&lt;br/&gt;[FUNCTION → crawl]&lt;br/&gt;in: competitor citations&lt;br/&gt;out: gap analysis (why they win)"]:::fn
+  PLAN["Card 3 Plan&lt;br/&gt;[FUNCTION → plan.ts]&lt;br/&gt;in: gaps + budget + team&lt;br/&gt;out: costed tactics + projection"]:::fn
+  TRACK["Card 4 Track&lt;br/&gt;[FUNCTION → crawl verify]&lt;br/&gt;in: prior plan + what's done&lt;br/&gt;out: before→after + pending"]:::fn
+
+  PANEL["Panel run&lt;br/&gt;[AGENT · Claude/Perplexity/Gemini/Groq]&lt;br/&gt;in: prompts, per-user keys&lt;br/&gt;out: raw AI answers (real-if-key-else-mock)"]:::agent
+  PARSE["Parse answers&lt;br/&gt;[AGENT · Claude Haiku]&lt;br/&gt;in: raw answer + candidate brands&lt;br/&gt;out: mentions, cited_domains, sentiment"]:::agent
+  SCORE["computeShareOfVoice / computeCitations&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: parsed answers&lt;br/&gt;out: SoV, citation share, per-prompt"]:::fn
+  RUNDB["runs / answers / sov_history&lt;br/&gt;[DATA · Supabase]&lt;br/&gt;in: persisted answers&lt;br/&gt;out: report_id, trends"]:::data
+
+  CAP["Cost cap gate&lt;br/&gt;[FUNCTION · spend + est*2 ≤ PANEL_COST_CAP_USD_PER_RUN]"]:::fn
+
+  CRAWL["crawlCitations&lt;br/&gt;[LIBRARY · Firecrawl → fetch/readability]&lt;br/&gt;in: cited/competitor URLs (respect robots.txt + rate limit)&lt;br/&gt;out: readable content + source_type + signals"]:::data
+  CITEDB["citations&lt;br/&gt;[DATA · Supabase cache]&lt;br/&gt;in: crawl evidence&lt;br/&gt;out: citation profile per competitor"]:::data
+
+  GAP["Gap vs leader&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: your profile vs leader profile&lt;br/&gt;out: biggest deficits per source type"]:::fn
+  ALLOC["allocatePlan (greedy knapsack)&lt;br/&gt;[FUNCTION · budget + teamSize*weeks*25h]&lt;br/&gt;in: gaps + tactic library&lt;br/&gt;out: chosen tactics (lift per cost+effort, gap-first)"]:::fn
+  PROJ["projectImpact&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: selected tactics (+GSC/Perplexity/Ahrefs if present)&lt;br/&gt;out: target share, traffic, conversions, assumptions, confidence"]:::fn
+  CONF{"Grounded by real data?&lt;br/&gt;[FUNCTION]"}:::dec
+  REPORT["generate_report&lt;br/&gt;[LIBRARY · @react-pdf / exceljs / HTML]&lt;br/&gt;in: plan + projection&lt;br/&gt;out: downloadable artifact + Storage URL"]:::data
+
+  U --&gt; CFG
+  MCPC --&gt; CARDS
+  CFG --&gt; CFGDB
+  CFG -. optional .-&gt; SUG
+  CFG -. optional .-&gt; DISC
+  CFGDB --&gt; CARDS
+
+  CARDS --&gt;|Benchmark| BENCH
+  CARDS --&gt;|Diagnose| DIAG
+  CARDS --&gt;|Plan| PLAN
+  CARDS --&gt;|Track| TRACK
+
+  BENCH --&gt; PANEL
+  CAP --&gt; PANEL
+  PANEL --&gt; PARSE --&gt; SCORE --&gt; RUNDB
+
+  DIAG --&gt; CRAWL --&gt; CITEDB --&gt; GAP
+  PLAN --&gt; GAP
+  GAP --&gt; ALLOC --&gt; PROJ --&gt; CONF
+  CONF --&gt;|"GSC/Perplexity/Ahrefs present"| REPORT
+  CONF --&gt;|"no grounding → confidence medium/low"| REPORT
+  TRACK --&gt; CRAWL
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+  classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;
+</pre>
+<h2>GetCited — MCP CONNECTOR: self-hosted OAuth + tool call flow</h2>
+<pre class="mermaid">%% GetCited — MCP CONNECTOR: self-hosted OAuth + tool call flow
+%% Ported from geo-radar-mcp (self-oauth.ts + auth.ts); login gate = GetCited
+%% Supabase session (not a shared password); clients/codes in Postgres.
+flowchart TD
+  CL["Claude / MCP client&lt;br/&gt;[DATA · external]&lt;br/&gt;in: server URL api/mcp&lt;br/&gt;out: HTTP requests"]:::data
+
+  DISC["GET .well-known/oauth-protected-resource&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: none&lt;br/&gt;out: resource + authorization_servers (this origin)"]:::fn
+  META["GET .well-known/oauth-authorization-server&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: none&lt;br/&gt;out: authorize/token/register endpoints, PKCE S256"]:::fn
+
+  REG["POST api/mcp/register (DCR RFC 7591)&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: client_name, redirect_uris&lt;br/&gt;out: client_id"]:::fn
+  REGDB["mcp_oauth_clients&lt;br/&gt;[DATA · Postgres, RLS deny-all]&lt;br/&gt;in: client_id + redirect_uris&lt;br/&gt;out: client lookup"]:::data
+
+  AUTHZ["GET api/mcp/authorize&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: client_id, redirect_uri, PKCE challenge, state&lt;br/&gt;out: one-time code OR redirect to login"]:::fn
+  GATE{"Signed in to GetCited?&lt;br/&gt;[FUNCTION · Supabase session cookie]"}:::dec
+  LOGIN["Login page (magic link / Google)&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: user credentials&lt;br/&gt;out: session cookie, resume authorize URL"]:::ask
+  URIGUARD{"redirect_uri registered?&lt;br/&gt;[FUNCTION · open-redirect guard]"}:::dec
+  ERR["inline invalid_request error&lt;br/&gt;[FUNCTION]&lt;br/&gt;never redirects to unregistered URIs"]:::term
+  CODEDB["mcp_oauth_codes&lt;br/&gt;[DATA · Postgres, 5-min TTL, one-time]&lt;br/&gt;in: code + user_id + PKCE challenge&lt;br/&gt;out: consumed at token exchange"]:::data
+
+  TOKEN["POST api/mcp/token&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: code + code_verifier (PKCE S256, timing-safe)&lt;br/&gt;out: HS256 JWT · sub = user_id · 7d TTL"]:::fn
+
+  MCP["POST api/mcp (streamable HTTP, stateless)&lt;br/&gt;[FUNCTION · withMcpAuth]&lt;br/&gt;in: Bearer JWT or MCP_API_KEY&lt;br/&gt;out: tool results (401 + WWW-Authenticate if invalid)"]:::fn
+  VERIFY{"Token valid?&lt;br/&gt;[FUNCTION · jwtVerify HS256, iss = this origin]"}:::dec
+
+  TOOLS["Tools: ping · get_active_config · run_benchmark · get_report · build_plan&lt;br/&gt;[FUNCTION → lib/geo pipeline]&lt;br/&gt;in: args + user_id from JWT sub&lt;br/&gt;out: SoV, reports, costed plan"]:::fn
+  DATA["configs / runs / answers / plans&lt;br/&gt;[DATA · Drizzle service client, EVERY query scoped by user_id]&lt;br/&gt;in: user_id&lt;br/&gt;out: only that user's rows"]:::data
+  PANEL["AI panel run&lt;br/&gt;[AGENT · Claude Haiku + Perplexity]&lt;br/&gt;in: buyer-intent queries, server keys&lt;br/&gt;out: answers (cost-capped per run)"]:::agent
+
+  CL --&gt; DISC --&gt; META
+  CL --&gt; REG --&gt; REGDB
+  CL --&gt; AUTHZ --&gt; URIGUARD
+  URIGUARD --&gt;|"not registered"| ERR
+  URIGUARD --&gt;|"registered"| GATE
+  GATE --&gt;|"no"| LOGIN
+  LOGIN -. "resume with ?next=" .-&gt; AUTHZ
+  GATE --&gt;|"yes"| CODEDB
+  CODEDB --&gt; CL
+  CL --&gt; TOKEN --&gt; CL
+  CL --&gt; MCP --&gt; VERIFY
+  VERIFY --&gt;|"invalid → 401 + resource_metadata"| DISC
+  VERIFY --&gt;|"valid"| TOOLS
+  TOOLS --&gt; DATA
+  TOOLS --&gt; PANEL
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+  classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;
+</pre>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+mermaid.initialize({ startOnLoad:false, securityLevel:"loose", theme:"base",
+  themeVariables:{ fontFamily:"-apple-system, Segoe UI, Roboto, sans-serif", fontSize:"14px" } });
+await mermaid.run({ querySelector:"pre.mermaid" });
+</script>
+</body></html>

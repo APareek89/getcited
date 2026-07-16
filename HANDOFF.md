@@ -123,8 +123,25 @@ observability/logger (dropped in port — currently errors only surface as clien
   leaderboard (CSS bars), active plan (current→target + download chips), recent reports, config summary
   chips, empty-state → "Run your first benchmark".
 
+## MCP connector (DONE — ported from geo-radar-mcp self-hosted OAuth)
+- **Endpoint:** `POST /api/mcp` (streamable HTTP, stateless, `mcp-handler` + `withMcpAuth`).
+  Tools: ping, get_active_config, run_benchmark, get_report, build_plan — all scoped by JWT `sub` (user id)
+  via `lib/mcp/data.ts` (Drizzle, every query user_id-scoped; MCP has no cookies → no RLS client).
+- **Auth (self-hosted OAuth, no external IdP):** DCR `POST /api/mcp/register` → `GET /api/mcp/authorize`
+  (gate = GetCited Supabase session, NOT geo-radar's shared password; resumes via /login?next=) →
+  `POST /api/mcp/token` (PKCE S256, one-time DB-backed codes) → HS256 JWT signed with
+  `OAUTH_SIGNING_SECRET`, iss/aud = deployment origin, 7d TTL, no refresh tokens. Static `MCP_API_KEY`
+  bearer kept for scripts (no user context). Metadata: `/.well-known/oauth-authorization-server` +
+  `/.well-known/oauth-protected-resource` (+ path-suffixed variant). Tables `mcp_oauth_clients/codes`
+  (migration 0004, RLS deny-all, service-client only).
+- **Smoke-tested:** metadata docs, 401+WWW-Authenticate challenge, DCR, authorize→login redirect
+  (flow preserved), open-redirect guard, initialize handshake, tools/list, ping, and a locally-signed
+  JWT calling get_active_config as a synthetic user. Claude custom connectors need a public HTTPS URL —
+  deploy (or tunnel) to install in claude.ai; the wiring derives issuer from the request origin.
+- **Diagrams:** `docs/mermaid/01-mcp-auth-flow.mmd` (+ master updated); viewer `docs/architecture-flow.html`.
+
 ## Possible follow-ups (not blocking v1)
-- Real hosted MCP endpoint (`/api/mcp`); GSC/GA4/YouTube/Ahrefs integrations to raise projection confidence.
+- GSC/GA4/YouTube/Ahrefs integrations to raise projection confidence.
 - Persist `citation_share` in sov_history; store report artifacts in Supabase Storage (currently on-demand).
 - Interactive end-to-end verification needs sign-in + spends on Claude (paid) — not run during build.
 - FMEA P2s (mock-audit rate limit, server logger) — deferred per user "P0-only" preference.
