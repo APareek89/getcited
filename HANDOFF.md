@@ -80,7 +80,9 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 - Base UI (not Radix): Button uses `render` prop not `asChild` → use `ButtonLink`; Tooltip uses `delay`.
 - Recharts v3 horizontal/vertical bar layout mis-scales domain with a hidden axis → used CSS bars for the SoV list.
 - pnpm 11 build-script gating; corp MITM proxy CA bundle; `GetCited` caps → lowercase scaffold subdir.
-- **Supabase project is SHARED** — namespace any global/auth-schema objects with `getcited_`.
+- **Supabase project is now GetCited's PRIMARY** (was shared; the other tenant was defunct staging —
+  its auth redirect was repointed to GetCited). Other apps' leftover tables still live in the DB:
+  ignore them, never drop them without the user. Keep namespacing global/auth objects `getcited_*`.
 
 ## FMEA (Phase 1 scan, 2026-07-16) — P1s fixed, P2s tracked
 Fixed: #1 middleware fail-closed on Supabase auth error; #2 config save inserts-first

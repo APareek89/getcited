@@ -6,7 +6,21 @@
 
 <!-- Newest first. -->
 
-## 2026-07-16 — FMEA: only fix CRITICAL (user preference)
+## 2026-07-16 — Shared Supabase project hijacked the auth redirect
+**What happened:** After sign-up, the user landed on `agentic-learning-studio-1.onrender.com/?code=...`
+— a different app sharing the same Supabase project.
+**Root cause:** Supabase only honors an app-supplied redirect (`emailRedirectTo`/OAuth `redirectTo`)
+if that URL is in the project's Auth **redirect allow-list**; otherwise it silently falls back to the
+project-wide **Site URL**, which was set to the other app's Render domain. Two apps can't both own
+Site URL — auth config is project-global, so a shared project is fundamentally unsafe for auth.
+**Watch for later:** any "wrong app after login" symptom → check Auth → URL Configuration first.
+**Resolution (user decision):** the OTHER app was defunct staging, so instead of a new project we
+repointed THIS project's auth to GetCited — Site URL `http://localhost:3210`, allow-list
+`http://localhost:3210/auth/callback`. This Supabase project is now GetCited's primary. The old
+staging app's login would redirect here if ever revived — give it a fresh project then. Other apps'
+leftover tables (lessons, kb_*, gstpilot_*, …) still live in this DB: ignore them, never drop
+without the user, and keep our RLS/user_id scoping discipline. Deleted the (now dangerous)
+cleanup-shared-project.sql that would have dropped GetCited's live tables.
 **What happened:** User said "if FMEA highlights non-critical bugs, ignore them."
 **How to apply:** Act on **P0 only**. P1/P2 → one-line mention at most, do NOT fix during the
 build unless asked. Don't burn build effort hardening non-critical issues. (Encoded in AGENTS.md.)
