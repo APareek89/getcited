@@ -27,3 +27,6 @@ Obey .power-coding/config.json FMEA triggers: smart_suggest is ON — watch for 
 and suggest an FMEA scan at a natural pause (never twice for the same change-set). Run
 `power-coding fmea` on request. The config's failure_categories list is the mandatory
 checklist; prd_path is docs/GETCITED-BUILD-PROMPT.md.
+**FMEA action policy (user preference, 2026-07-16): only ACT ON critical (P0) findings.**
+Non-critical findings (P1/P2) get at most a one-line mention and are NOT fixed during the
+build unless the user explicitly asks. Don't spend effort hardening non-critical bugs.

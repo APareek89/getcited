@@ -6,6 +6,17 @@
 
 <!-- Newest first. -->
 
+## 2026-07-16 — FMEA: only fix CRITICAL (user preference)
+**What happened:** User said "if FMEA highlights non-critical bugs, ignore them."
+**How to apply:** Act on **P0 only**. P1/P2 → one-line mention at most, do NOT fix during the
+build unless asked. Don't burn build effort hardening non-critical issues. (Encoded in AGENTS.md.)
+
+## 2026-07-16 — Build mandate: drive to a full first version
+**What happened:** User: "continue till the time we have the first version of full app ready."
+**How to apply:** Build Phases 2→5 autonomously without pausing to ask between phases; commit per
+phase, keep green, update Handoff.MD. Confirm before any PAID live call in a build step; verify
+with the mock path where possible.
+
 ## 2026-07-16 — Supabase project is SHARED, not dedicated
 **What happened:** After running migrations, `db-check` showed ~30 tables from other apps
 (`lessons`, `gstpilot_*`, `kb_*`, `generations`…). The `DATABASE_URL` points at a Supabase
