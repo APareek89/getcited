@@ -14,6 +14,22 @@
 - At the **start of each phase**, tell the user exactly which `.env.local` keys it needs.
 - Do **not** edit the reference project `geo-radar-mcp` — read-only port source.
 
+## Next session — pending points (2026-07-17)
+1. **User validates v1.1 live**: re-save Configure (old competitors are URLs → hit "Suggest competitors",
+   set real budget/team), run "How can I improve?" card, check roadmap + PDF, try generate_content + upload.
+2. **Loop offer is OPEN** (Loop.MD status: offered) — ask once: turn the eval loop on?
+3. User may add keys: `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` (tracing) + `FIRECRAWL_API_KEY` (richer crawls).
+4. Candidate next features (PM backlog): content calendar view from roadmap, weekly digest email,
+   competitor-watch alerts, Vercel deploy (needed for installing the MCP connector in claude.ai).
+
+## Decisions
+- 2026-07-16 — Supabase project = the formerly-shared one, repointed to GetCited (other tenant was dead staging).
+- 2026-07-16 — MCP auth = self-hosted OAuth ported from geo-radar (no external IdP); authorize gated by app session.
+- 2026-07-16 — FMEA policy = act on P0 only (user preference). Competitors stored as names + parallel domains.
+- 2026-07-16 — GitHub: private repo on the user's active gh account; repo must stay PRIVATE.
+
+**Session efficiency:** 🎯 ~75% feature (6 phases + v1.1) · 🔧 ~15% support (shared-Supabase auth untangle, pnpm/corp-TLS) · 🔁 ~10% rework (competitors-as-URLs fix, Recharts bar swap)
+
 ## Session continuity (Power Coding)
 - **Resume a fresh session:** type `Refer to Handoff.MD in /Users/anandpareek/Documents/Projects/GetCited and begin`.
 - Update this file after every major change (snapshot, not a journal — one screen). At ~10% context left, update it early and tell the user the magic phrase.

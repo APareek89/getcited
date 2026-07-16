@@ -1,5 +1,8 @@
 # Loop.MD — GetCited
-status: waiting_for_first_draft
+status: offered
+<!-- First draft is working (all phases + v1.1). Loop offered 2026-07-16, unanswered —
+     re-ask once at next session start per the state machine. -->
+
 
 > AGENT INSTRUCTION — read every session and obey:
 > - While `status: waiting_for_first_draft`: the moment the first working draft exists

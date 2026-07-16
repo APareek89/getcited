@@ -23,7 +23,12 @@ flowchart TD
   SUG["suggest_queries&lt;br/&gt;[AGENT · Claude]&lt;br/&gt;in: brand + description (+Google Suggest/Perplexity)&lt;br/&gt;out: editable buyer-intent prompts"]:::agent
   DISC["discover_competitors&lt;br/&gt;[AGENT · Claude]&lt;br/&gt;in: brand URL&lt;br/&gt;out: suggested competitor URLs"]:::agent
 
+  THREADS["Threads + messages&lt;br/&gt;[DATA · Supabase threads/thread_messages, RLS]&lt;br/&gt;in: UIMessage parts per turn&lt;br/&gt;out: sidebar list + replayed conversation"]:::data
+  MEM["Memory&lt;br/&gt;[DATA · memories: working/procedural/structural]&lt;br/&gt;in: save_memory tool writes&lt;br/&gt;out: injected into agent system prompt each turn"]:::data
+
   CARDS{"Agent Mode card chosen?&lt;br/&gt;[FUNCTION decides route]"}:::dec
+  CONTENT["generate_content&lt;br/&gt;[AGENT · Claude Sonnet]&lt;br/&gt;in: type (blog/vs-page/reddit/li/pitch/review/yt) + topic + config + plan&lt;br/&gt;out: publish-ready markdown draft"]:::agent
+  ROADMAP["generateRoadmap&lt;br/&gt;[AGENT · Claude Sonnet]&lt;br/&gt;in: chosen tactics + gaps + capacity&lt;br/&gt;out: week-by-week actions/owner/hours/deliverable/KPI"]:::agent
 
   BENCH["Card 1 Benchmark&lt;br/&gt;[FUNCTION → pipeline]&lt;br/&gt;in: config&lt;br/&gt;out: SoV + citations + sentiment"]:::fn
   DIAG["Card 2 Diagnose&lt;br/&gt;[FUNCTION → crawl]&lt;br/&gt;in: competitor citations&lt;br/&gt;out: gap analysis (why they win)"]:::fn
@@ -47,7 +52,12 @@ flowchart TD
   REPORT["generate_report&lt;br/&gt;[LIBRARY · @react-pdf / exceljs / HTML]&lt;br/&gt;in: plan + projection&lt;br/&gt;out: downloadable artifact + Storage URL"]:::data
 
   U --&gt; CFG
+  U --&gt; THREADS
+  MEM -. "prompt injection" .-&gt; CARDS
+  CARDS -. "save_memory tool" .-&gt; MEM
   MCPC --&gt; CARDS
+  CARDS --&gt;|"content request"| CONTENT
+  ALLOC --&gt; ROADMAP --&gt; PROJ
   CFG --&gt; CFGDB
   CFG -. optional .-&gt; SUG
   CFG -. optional .-&gt; DISC

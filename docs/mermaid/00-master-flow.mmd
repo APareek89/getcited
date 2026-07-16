@@ -9,7 +9,12 @@ flowchart TD
   SUG["suggest_queries<br/>[AGENT · Claude]<br/>in: brand + description (+Google Suggest/Perplexity)<br/>out: editable buyer-intent prompts"]:::agent
   DISC["discover_competitors<br/>[AGENT · Claude]<br/>in: brand URL<br/>out: suggested competitor URLs"]:::agent
 
+  THREADS["Threads + messages<br/>[DATA · Supabase threads/thread_messages, RLS]<br/>in: UIMessage parts per turn<br/>out: sidebar list + replayed conversation"]:::data
+  MEM["Memory<br/>[DATA · memories: working/procedural/structural]<br/>in: save_memory tool writes<br/>out: injected into agent system prompt each turn"]:::data
+
   CARDS{"Agent Mode card chosen?<br/>[FUNCTION decides route]"}:::dec
+  CONTENT["generate_content<br/>[AGENT · Claude Sonnet]<br/>in: type (blog/vs-page/reddit/li/pitch/review/yt) + topic + config + plan<br/>out: publish-ready markdown draft"]:::agent
+  ROADMAP["generateRoadmap<br/>[AGENT · Claude Sonnet]<br/>in: chosen tactics + gaps + capacity<br/>out: week-by-week actions/owner/hours/deliverable/KPI"]:::agent
 
   BENCH["Card 1 Benchmark<br/>[FUNCTION → pipeline]<br/>in: config<br/>out: SoV + citations + sentiment"]:::fn
   DIAG["Card 2 Diagnose<br/>[FUNCTION → crawl]<br/>in: competitor citations<br/>out: gap analysis (why they win)"]:::fn
@@ -33,7 +38,12 @@ flowchart TD
   REPORT["generate_report<br/>[LIBRARY · @react-pdf / exceljs / HTML]<br/>in: plan + projection<br/>out: downloadable artifact + Storage URL"]:::data
 
   U --> CFG
+  U --> THREADS
+  MEM -. "prompt injection" .-> CARDS
+  CARDS -. "save_memory tool" .-> MEM
   MCPC --> CARDS
+  CARDS -->|"content request"| CONTENT
+  ALLOC --> ROADMAP --> PROJ
   CFG --> CFGDB
   CFG -. optional .-> SUG
   CFG -. optional .-> DISC
