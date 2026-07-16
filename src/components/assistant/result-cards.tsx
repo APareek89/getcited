@@ -80,6 +80,13 @@ interface Projection {
   assumptions: string[];
   disclaimer: string;
 }
+interface RoadmapWeek {
+  week: number;
+  theme: string;
+  actions: { tactic_id: string; action: string; owner_role: string; hours: number; deliverable: string }[];
+  kpi_checkpoint: string;
+}
+
 export interface PlanOutput {
   plan_id: string;
   budget_usd: number;
@@ -90,10 +97,13 @@ export interface PlanOutput {
   spent_hours: number;
   tactics: ChosenTactic[];
   projection: Projection;
+  roadmap?: RoadmapWeek[];
+  capacity_note?: string;
 }
 
 export function PlanResult({ data }: { data: PlanOutput }) {
   const [showAssumptions, setShowAssumptions] = useState(false);
+  const [openWeeks, setOpenWeeks] = useState(false);
   const p = data.projection;
   return (
     <div className="space-y-4">
@@ -183,12 +193,58 @@ export function PlanResult({ data }: { data: PlanOutput }) {
         )}
       </div>
 
+      {/* Capacity warning */}
+      {data.capacity_note && (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-xs text-warning">
+          {data.capacity_note}
+        </div>
+      )}
+
+      {/* Week-by-week roadmap */}
+      {data.roadmap && data.roadmap.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setOpenWeeks((s) => !s)}
+            className="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground"
+          >
+            Week-by-week roadmap ({data.roadmap.length} weeks)
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", openWeeks && "rotate-180")} />
+          </button>
+          {openWeeks && (
+            <div className="space-y-2">
+              {data.roadmap.map((w) => (
+                <div key={w.week} className="rounded-lg border border-border bg-card p-3">
+                  <div className="mb-1.5 text-xs font-medium">
+                    Week {w.week} · <span className="text-muted-foreground">{w.theme}</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {w.actions.map((a, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs">
+                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
+                        <span className="min-w-0 flex-1">
+                          {a.action}{" "}
+                          <span className="text-muted-foreground">
+                            — {a.owner_role}, {Math.round(a.hours)}h → {a.deliverable}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-1.5 text-[11px] text-warning/90">KPI: {w.kpi_checkpoint}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Download chips */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Download:</span>
-        <DownloadChip planId={data.plan_id} format="html" icon={FileText} label="HTML" />
+        <span className="text-xs text-muted-foreground">Download for your team:</span>
         <DownloadChip planId={data.plan_id} format="pdf" icon={FileType} label="PDF" />
         <DownloadChip planId={data.plan_id} format="xlsx" icon={FileSpreadsheet} label="Excel" />
+        <DownloadChip planId={data.plan_id} format="html" icon={FileText} label="HTML" />
       </div>
     </div>
   );

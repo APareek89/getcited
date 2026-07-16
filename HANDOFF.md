@@ -140,6 +140,33 @@ observability/logger (dropped in port — currently errors only surface as clien
   deploy (or tunnel) to install in claude.ai; the wiring derives issuer from the request origin.
 - **Diagrams:** `docs/mermaid/01-mcp-auth-flow.mmd` (+ master updated); viewer `docs/architecture-flow.html`.
 
+## v1.1 (user-feedback round, 2026-07-16 evening) — DONE
+- **Memory**: `memories` table (working/procedural/structural), injected into the agent system
+  prompt each turn; `save_memory` tool; capped 10/kind. **Threads**: `threads`+`thread_messages`
+  (full UIMessage parts jsonb), left sidebar in Agent Mode, lazy-created on first send, persisted
+  via `toUIMessageStreamResponse({originalMessages,onFinish})`, last-open restored from
+  localStorage (fixes "thread went away"). APIs: GET/POST `/api/threads`, GET/DELETE `/api/threads/[id]`.
+- **Langfuse**: `src/instrumentation.ts` (@vercel/otel + LangfuseExporter, no-op without keys) +
+  `experimental_telemetry` on every AI call (agent, panelists, parser, roadmap, content, assist).
+  NOTE ai v7 TelemetryOptions has NO `metadata` field — only isEnabled/functionId/etc.
+- **Insights fixes** (root causes in Learning.MD): competitors = names + `competitor_domains`
+  (migration 0005), Perplexity `res.sources` captured → merged into cited_domains,
+  `persistCitations()` caches crawl evidence, capacity_note when budget/team tiny.
+- **Detailed plan**: `lib/geo/roadmap.ts` (Sonnet week-by-week: actions/owner/hours/deliverable/KPI)
+  stored on `plans.roadmap`; in PDF (own page, manager-shareable), Excel (Roadmap sheet), HTML, and
+  the PlanResult card. 5th starter card "How can I improve?" (Action plan).
+- **Agent UI**: markdown rendering (react-markdown+gfm+@tailwindcss/typography `@plugin` in
+  globals.css), model selector INSIDE the composer, upload button (txt/md/csv/json ≤120KB → inlined
+  into the message), per-message "Download as markdown", no divider above cards.
+- **Content generation** (`lib/geo/content.ts`): blog_post, comparison_page, reddit_answer,
+  linkedin_post, guest_post_pitch, review_request_email, youtube_brief — chat tool + ContentResult
+  card (copy/download) **and MCP parity** (`generate_content`, `get_latest_plan` added; build_plan
+  now returns roadmap + persists citations too).
+- **Dashboard**: "Plan documents" card lists every plan with date/time, target, confidence,
+  PDF/XLS/HTML downloads.
+- **User must re-save Configure** (old configs hold URL-competitors) and can add
+  LANGFUSE_PUBLIC_KEY/SECRET_KEY (+optional LANGFUSE_BASEURL) and FIRECRAWL_API_KEY.
+
 ## Possible follow-ups (not blocking v1)
 - GSC/GA4/YouTube/Ahrefs integrations to raise projection confidence.
 - Persist `citation_share` in sov_history; store report artifacts in Supabase Storage (currently on-demand).

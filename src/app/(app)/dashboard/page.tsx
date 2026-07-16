@@ -163,24 +163,48 @@ export default async function DashboardPage() {
           )}
         </Card>
 
-        {/* Recent reports */}
+        {/* All plans, with dates + downloads */}
         <Card className="p-5">
-          <div className="mb-3 text-sm font-medium">Recent reports</div>
-          {d.reports.length > 0 ? (
-            <div className="space-y-1.5">
-              {d.reports.map((r) => (
-                <div key={r.id} className="flex items-center gap-2 text-sm">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="capitalize">{r.kind}</span>
-                  <span className="text-xs uppercase text-muted-foreground">{r.format}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {new Date(r.createdAt).toLocaleDateString()}
-                  </span>
+          <div className="mb-3 text-sm font-medium">Plan documents</div>
+          {d.plans.length > 0 ? (
+            <div className="space-y-2">
+              {d.plans.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium">
+                      {new Date(p.createdAt).toLocaleDateString(undefined, {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}{" "}
+                      <span className="text-muted-foreground">
+                        · {new Date(p.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      target {pct(p.targetCitationShare)} · {p.tactics.length} tactics ·{" "}
+                      <span className="capitalize">{p.confidence ?? "low"}</span> confidence
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <ReportChip planId={p.id} format="pdf" label="PDF" />
+                    <ReportChip planId={p.id} format="xlsx" label="XLS" />
+                    <ReportChip planId={p.id} format="html" label="HTML" />
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No downloads yet.</div>
+            <div className="text-sm text-muted-foreground">
+              No plans yet.{" "}
+              <Link href="/assistant" className="text-primary">
+                Build one →
+              </Link>
+            </div>
           )}
         </Card>
       </div>

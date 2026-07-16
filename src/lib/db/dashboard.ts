@@ -1,7 +1,7 @@
 import "server-only";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { getActiveConfig, type ConfigView } from "./configs";
-import { getLatestPlan, type PlanView } from "./plans";
+import { getLatestPlan, listPlans, type PlanView } from "./plans";
 import { SupabaseGeoStore } from "./geo-store";
 import {
   buildReport,
@@ -26,6 +26,7 @@ export interface DashboardData {
   leaderboard: ShareOfVoiceEntry[];
   trend: { date: string; sov: number }[];
   plan: PlanView | null;
+  plans: PlanView[];
   reports: { id: string; kind: string; format: string; title: string | null; createdAt: string }[];
   lastRunAt: string | null;
 }
@@ -67,6 +68,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   }));
 
   const plan = await getLatestPlan();
+  const plans = await listPlans(10);
 
   let kpis: DashboardKpis | null = null;
   let leaderboard: ShareOfVoiceEntry[] = [];
@@ -114,6 +116,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     leaderboard,
     trend,
     plan,
+    plans,
     reports,
     lastRunAt,
   };

@@ -11,6 +11,8 @@ export interface ConfigView {
   description: string | null;
   brandDomains: string[];
   competitors: string[];
+  /** Parallel to competitors: matching domain per competitor ("" when unknown). */
+  competitorDomains: string[];
   queries: string[];
   budgetUsd: number;
   teamSize: number;
@@ -27,6 +29,7 @@ export interface SaveConfigInput {
   description?: string | null;
   brandDomains: string[];
   competitors: string[];
+  competitorDomains: string[];
   queries: string[];
   budgetUsd: number;
   teamSize: number;
@@ -47,6 +50,7 @@ function mapRow(r: any): ConfigView {
     description: r.description,
     brandDomains: r.brand_domains ?? [],
     competitors: r.competitors ?? [],
+    competitorDomains: r.competitor_domains ?? [],
     queries: r.queries ?? [],
     budgetUsd: r.budget_usd,
     teamSize: r.team_size,
@@ -118,6 +122,7 @@ export async function saveConfigVersion(
       description: input.description ?? null,
       brand_domains: input.brandDomains,
       competitors: input.competitors,
+      competitor_domains: input.competitorDomains,
       queries: input.queries,
       budget_usd: input.budgetUsd,
       team_size: input.teamSize,

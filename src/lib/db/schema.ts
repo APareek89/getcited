@@ -43,6 +43,9 @@ export const configs = pgTable(
     description: text("description"),
     brandDomains: text("brand_domains").array().notNull().default([]),
     competitors: text("competitors").array().notNull().default([]),
+    // Parallel to competitors: the matching domain per competitor ("" when unknown).
+    // Names feed brand-mention matching; domains feed citation attribution.
+    competitorDomains: text("competitor_domains").array().notNull().default([]),
     queries: text("queries").array().notNull().default([]),
     budgetUsd: real("budget_usd").notNull().default(0),
     teamSize: integer("team_size").notNull().default(1),
@@ -173,6 +176,8 @@ export const plans = pgTable(
     runId: uuid("run_id"),
     tactics: jsonb("tactics").$type<unknown[]>().notNull().default([]),
     projection: jsonb("projection").$type<Record<string, unknown>>(),
+    // Week-by-week execution roadmap (LLM-expanded; manager-shareable in the PDF).
+    roadmap: jsonb("roadmap").$type<unknown[]>(),
     targetCitationShare: real("target_citation_share"),
     timelineWeeks: integer("timeline_weeks"),
     // high | medium | low
@@ -211,6 +216,52 @@ export const reports = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("reports_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+// ── Agent threads + memory ───────────────────────────────────────────────────
+export const threads = pgTable(
+  "threads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    title: text("title").notNull().default("New thread"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("threads_user_updated_idx").on(t.userId, t.updatedAt)],
+);
+
+// Full UIMessage parts stored as jsonb so tool-call cards replay on reload.
+export const threadMessages = pgTable(
+  "thread_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    threadId: uuid("thread_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    messageId: text("message_id").notNull(),
+    role: text("role").notNull(),
+    parts: jsonb("parts").$type<unknown[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("thread_messages_thread_idx").on(t.threadId, t.createdAt)],
+);
+
+// Agent memory: working (current focus/goals), procedural (how the user likes
+// things done), structural (durable facts about brand/market). Injected into the
+// system prompt each turn; written via the save_memory tool.
+export const memories = pgTable(
+  "memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    // working | procedural | structural
+    kind: text("kind").notNull(),
+    content: text("content").notNull(),
+    source: text("source"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("memories_user_kind_idx").on(t.userId, t.kind)],
 );
 
 // ── MCP OAuth (self-hosted authorization server; ported from geo-radar-mcp) ──

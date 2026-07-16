@@ -13,15 +13,25 @@ import {
   type TrackOutput,
 } from "./result-cards";
 
+import { ContentResult, type ContentOutput } from "./content-result";
+
 const TOOL_LABELS: Record<string, string> = {
   get_active_config: "Loading your config",
   run_benchmark: "Running AI panel benchmark",
   diagnose_citations: "Diagnosing citation gaps",
-  build_plan: "Building your costed plan",
+  build_plan: "Building your action plan + roadmap",
   track_progress: "Tracking plan progress",
+  generate_content: "Writing your content",
+  save_memory: "Saving to memory",
 };
 
-const SPECIAL_RENDER = new Set(["run_benchmark", "diagnose_citations", "build_plan", "track_progress"]);
+const SPECIAL_RENDER = new Set([
+  "run_benchmark",
+  "diagnose_citations",
+  "build_plan",
+  "track_progress",
+  "generate_content",
+]);
 
 function renderResult(name: string, output: unknown): React.ReactNode {
   switch (name) {
@@ -33,6 +43,8 @@ function renderResult(name: string, output: unknown): React.ReactNode {
       return <PlanResult data={output as PlanOutput} />;
     case "track_progress":
       return <TrackResult data={output as TrackOutput} />;
+    case "generate_content":
+      return <ContentResult data={output as ContentOutput} />;
     default:
       return null;
   }

@@ -9,12 +9,14 @@ export interface SavePlanInput {
   runId: string | null;
   tactics: ChosenTactic[];
   projection: Projection;
+  roadmap?: unknown[] | null;
 }
 
 export interface PlanView {
   id: string;
   tactics: ChosenTactic[];
   projection: Projection | null;
+  roadmap: unknown[] | null;
   targetCitationShare: number | null;
   timelineWeeks: number | null;
   confidence: string | null;
@@ -27,6 +29,7 @@ function mapPlan(r: any): PlanView {
     id: r.id,
     tactics: (r.tactics ?? []) as ChosenTactic[],
     projection: (r.projection ?? null) as Projection | null,
+    roadmap: (r.roadmap ?? null) as unknown[] | null,
     targetCitationShare: r.target_citation_share,
     timelineWeeks: r.timeline_weeks,
     confidence: r.confidence,
@@ -46,6 +49,7 @@ export async function savePlan(input: SavePlanInput): Promise<PlanView> {
       run_id: input.runId,
       tactics: input.tactics,
       projection: input.projection,
+      roadmap: input.roadmap ?? null,
       target_citation_share: input.projection.targetCitationShare,
       timeline_weeks: input.projection.timelineWeeks,
       confidence: input.projection.confidence,
@@ -73,4 +77,15 @@ export async function getPlanById(id: string): Promise<PlanView | null> {
   const { data, error } = await supabase.from("plans").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
   return data ? mapPlan(data) : null;
+}
+
+export async function listPlans(limit = 12): Promise<PlanView[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("plans")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapPlan);
 }

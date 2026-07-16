@@ -2,6 +2,11 @@ import "server-only";
 import ExcelJS from "exceljs";
 import type { PlanView } from "@/lib/db/plans";
 import type { ConfigView } from "@/lib/db/configs";
+import type { RoadmapWeek } from "@/lib/geo/roadmap";
+
+function roadmapOf(plan: PlanView): RoadmapWeek[] {
+  return Array.isArray(plan.roadmap) ? (plan.roadmap as RoadmapWeek[]) : [];
+}
 
 function pct(n: number | null | undefined) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
@@ -26,6 +31,20 @@ export function buildPlanHtml(plan: PlanView, cfg: ConfigView | null): string {
     )
     .join("");
   const assumptions = (p?.assumptions ?? []).map((a) => `<li>${esc(a)}</li>`).join("");
+  const weeks = roadmapOf(plan);
+  const roadmapHtml = weeks.length
+    ? `<div class="card"><strong>Week-by-week roadmap</strong>${weeks
+        .map(
+          (w) => `<div style="margin-top:14px"><div style="font-weight:600">Week ${w.week} — ${esc(w.theme)}</div>
+    <table style="margin-top:6px"><thead><tr><th>Action</th><th>Owner</th><th class="num">Hrs</th><th>Deliverable</th></tr></thead><tbody>${w.actions
+      .map(
+        (a) => `<tr><td>${esc(a.action)}</td><td class="num">${esc(a.owner_role)}</td><td class="num">${Math.round(a.hours)}</td><td class="num">${esc(a.deliverable)}</td></tr>`,
+      )
+      .join("")}</tbody></table>
+    <div class="muted" style="font-size:12px;margin-top:4px">KPI checkpoint: ${esc(w.kpi_checkpoint)}</div></div>`,
+        )
+        .join("")}</div>`
+    : "";
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -67,6 +86,8 @@ ul{margin:8px 0 0;padding-left:18px}li{margin:3px 0;font-size:12px;color:var(--m
   <table style="margin-top:10px"><thead><tr><th>Tactic</th><th>Closes gap</th><th class="num">Cost</th><th class="num">Effort</th><th class="num">Lead</th></tr></thead>
   <tbody>${tacticRows}</tbody></table>
 </div>
+
+${roadmapHtml}
 
 <div class="warn">
   <strong style="color:var(--warn)">Modeled projection — not a guarantee.</strong>
@@ -110,6 +131,26 @@ export async function buildPlanWorkbook(plan: PlanView, cfg: ConfigView | null):
     tac.addRow([t.name, t.closesGap ?? "", t.costUsd, Math.round(t.effortHours), `${t.leadWeeks[0]}-${t.leadWeeks[1]}`]);
   }
   tac.getRow(1).font = { bold: true };
+
+  const weeks = roadmapOf(plan);
+  if (weeks.length) {
+    const rm = wb.addWorksheet("Roadmap");
+    rm.columns = [
+      { header: "Week", width: 7 },
+      { header: "Theme", width: 30 },
+      { header: "Action", width: 52 },
+      { header: "Owner", width: 20 },
+      { header: "Hours", width: 8 },
+      { header: "Deliverable", width: 40 },
+      { header: "KPI checkpoint", width: 36 },
+    ];
+    for (const w of weeks) {
+      for (const a of w.actions) {
+        rm.addRow([w.week, w.theme, a.action, a.owner_role, Math.round(a.hours), a.deliverable, w.kpi_checkpoint]);
+      }
+    }
+    rm.getRow(1).font = { bold: true };
+  }
 
   const asm = wb.addWorksheet("Assumptions");
   asm.columns = [{ header: "Assumption", width: 90 }];

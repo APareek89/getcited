@@ -36,6 +36,7 @@ export async function mcpActiveConfig(userId: string): Promise<ConfigView | null
     description: r.description,
     brandDomains: r.brandDomains,
     competitors: r.competitors,
+    competitorDomains: r.competitorDomains,
     queries: r.queries,
     budgetUsd: r.budgetUsd,
     teamSize: r.teamSize,
@@ -54,6 +55,7 @@ export async function mcpSavePlan(params: {
   runId: string | null;
   tactics: ChosenTactic[];
   projection: Projection;
+  roadmap?: unknown[] | null;
 }): Promise<{ id: string }> {
   const rows = await db
     .insert(schema.plans)
@@ -64,12 +66,39 @@ export async function mcpSavePlan(params: {
       runId: params.runId,
       tactics: params.tactics,
       projection: params.projection as unknown as Record<string, unknown>,
+      roadmap: params.roadmap ?? null,
       targetCitationShare: params.projection.targetCitationShare,
       timelineWeeks: params.projection.timelineWeeks,
       confidence: params.projection.confidence,
     })
     .returning({ id: schema.plans.id });
   return rows[0]!;
+}
+
+export async function mcpLatestPlan(userId: string): Promise<{
+  id: string;
+  tactics: ChosenTactic[];
+  projection: Projection | null;
+  roadmap: unknown[] | null;
+  targetCitationShare: number | null;
+  createdAt: string;
+} | null> {
+  const rows = await db
+    .select()
+    .from(schema.plans)
+    .where(eq(schema.plans.userId, userId))
+    .orderBy(desc(schema.plans.createdAt))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id,
+    tactics: (r.tactics ?? []) as ChosenTactic[],
+    projection: (r.projection ?? null) as Projection | null,
+    roadmap: (r.roadmap ?? null) as unknown[] | null,
+    targetCitationShare: r.targetCitationShare,
+    createdAt: r.createdAt.toISOString(),
+  };
 }
 
 /** Drizzle-backed GeoStore scoped to one user (MCP twin of SupabaseGeoStore). */
@@ -167,4 +196,40 @@ export class McpGeoStore implements GeoStore {
       })),
     };
   }
+}
+
+/**
+ * Persist crawled citation evidence (spec §5: cache in Supabase). Called after a
+ * diagnose crawl so insights accumulate and the dashboard can show evidence depth.
+ */
+export async function persistCitations(
+  userId: string,
+  runId: string | null,
+  results: {
+    url: string;
+    domain: string;
+    sourceType: string;
+    title: string | null;
+    excerpt: string | null;
+    mentionsBrand: boolean;
+    mentionsCompetitor: string | null;
+    fetched: boolean;
+    skippedReason?: string;
+  }[],
+): Promise<void> {
+  if (results.length === 0) return;
+  await db.insert(schema.citations).values(
+    results.map((r) => ({
+      userId,
+      runId,
+      url: r.url,
+      domain: r.domain,
+      sourceType: r.sourceType,
+      citesCompetitor: r.mentionsCompetitor,
+      mentionsBrand: r.mentionsBrand,
+      title: r.title,
+      excerpt: r.excerpt,
+      signals: { fetched: r.fetched, skippedReason: r.skippedReason ?? null },
+    })),
+  );
 }

@@ -48,6 +48,7 @@ export function createAnthropicParser(apiKey: string): Parser {
           `Candidate brands: ${candidates.join(", ")}\n\n` +
           `Answer to analyze:\n"""${answer}"""`,
         maxOutputTokens: 400,
+        experimental_telemetry: { isEnabled: true, functionId: "parser" },
       });
       const usage: TokenUsage = {
         inputTokens: res.usage?.inputTokens ?? 0,

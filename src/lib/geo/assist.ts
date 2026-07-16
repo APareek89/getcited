@@ -84,6 +84,7 @@ export async function suggestQueries(input: SuggestQueriesInput): Promise<string
       groundingBlock +
       `\nReturn 6–10 diverse buyer-intent prompts.`,
     maxOutputTokens: 500,
+    experimental_telemetry: { isEnabled: true, functionId: "suggest-queries" },
   });
   return dedupe(res.object.queries.map((q) => q.trim())).slice(0, 10);
 }
@@ -113,6 +114,7 @@ export async function discoverCompetitors(
       (input.description ? `What they do: ${input.description}\n` : "") +
       `\nReturn up to 5 direct competitors.`,
     maxOutputTokens: 400,
+    experimental_telemetry: { isEnabled: true, functionId: "discover-competitors" },
   });
   const brandHost = safeHost(input.brandUrl);
   return res.object.competitors

@@ -6,6 +6,9 @@ import { requireUser } from "@/lib/auth";
 import { getActiveConfig, type ConfigView } from "@/lib/db/configs";
 import { SupabaseGeoStore } from "@/lib/db/geo-store";
 import { savePlan, getLatestPlan } from "@/lib/db/plans";
+import { saveThreadMessages } from "@/lib/db/threads";
+import { listMemories, saveMemory, memoryPromptBlock } from "@/lib/db/memories";
+import { persistCitations } from "@/lib/mcp/data";
 import {
   InProcessPanelRunner,
   buildReport,
@@ -21,15 +24,18 @@ import {
 import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
 import { getStoredProviderKeys } from "@/lib/db/api-keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
+import { generateRoadmap } from "@/lib/geo/roadmap";
+import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 import { AGENT_SYSTEM_PROMPT, DEFAULT_AGENT_MODEL, isAgentModel } from "@/lib/geo/agent";
 
-/**
- * Resolve which provider keys a run uses:
- *  - Self Serve session keys (sent per-request, never persisted) take precedence,
- *  - else Self Serve stored (encrypted) keys,
- *  - else We Serve (our server env keys).
- * Self Serve NEVER falls back to our keys.
- */
+export const maxDuration = 300;
+
+function panelFor(keys: ProviderKeys): PanelistId[] {
+  const panel: PanelistId[] = ["haiku"];
+  if (keys.perplexity) panel.push("perplexity");
+  return panel;
+}
+
 async function resolveKeys(
   session: Partial<ProviderKeys> | undefined,
   mode: string | undefined,
@@ -38,14 +44,6 @@ async function resolveKeys(
   if (hasSession) return { ...session };
   if (mode === "self_serve") return getStoredProviderKeys();
   return serverProviderKeys();
-}
-
-export const maxDuration = 300;
-
-function panelFor(keys: ProviderKeys): PanelistId[] {
-  const panel: PanelistId[] = ["haiku"];
-  if (keys.perplexity) panel.push("perplexity");
-  return panel;
 }
 
 /** Run (or fetch) a benchmark and return its stored report. */
@@ -77,12 +75,26 @@ async function runBenchmark(
   return { report, brand, ownedDomains };
 }
 
-async function reportById(
+async function reportById(user: User, reportId: string): Promise<FullReport | null> {
+  return buildReport(new SupabaseGeoStore(user.id), reportId);
+}
+
+/** Diagnose + persist crawled evidence to the citations table. */
+async function diagnoseAndPersist(
   user: User,
-  reportId: string,
-): Promise<FullReport | null> {
-  const store = new SupabaseGeoStore(user.id);
-  return buildReport(store, reportId);
+  report: FullReport,
+  brand: string,
+  ownedDomains: string[],
+) {
+  const dx = await diagnoseFromReport(report, { brand, ownedDomains, crawl: true });
+  if (dx.crawled?.length) {
+    try {
+      await persistCitations(user.id, report.report_id, dx.crawled);
+    } catch {
+      // evidence cache is best-effort; never fail the tool on it
+    }
+  }
+  return dx;
 }
 
 export async function POST(req: Request) {
@@ -91,8 +103,10 @@ export async function POST(req: Request) {
     messages: UIMessage[];
     model?: string;
     keys?: Partial<ProviderKeys>;
+    threadId?: string;
   };
   const modelId = body.model && isAgentModel(body.model) ? body.model : DEFAULT_AGENT_MODEL;
+  const threadId = body.threadId;
 
   const cfgForKeys = await getActiveConfig();
   const keys = await resolveKeys(body.keys, cfgForKeys?.mode);
@@ -106,11 +120,20 @@ export async function POST(req: Request) {
   }
   const anthropic = createAnthropic({ apiKey: keys.anthropic });
 
+  // Persistent memory → system prompt.
+  let memoryBlock = "";
+  try {
+    memoryBlock = memoryPromptBlock(await listMemories());
+  } catch {
+    memoryBlock = "";
+  }
+
   const result = streamText({
     model: anthropic(modelId),
-    system: AGENT_SYSTEM_PROMPT,
+    system: AGENT_SYSTEM_PROMPT + memoryBlock,
     messages: await convertToModelMessages(body.messages),
     stopWhen: stepCountIs(8),
+    experimental_telemetry: { isEnabled: true, functionId: "geo-assistant" },
     tools: {
       get_active_config: tool({
         description: "Load the user's saved config (brand, competitors, queries, budget, team).",
@@ -132,7 +155,7 @@ export async function POST(req: Request) {
 
       run_benchmark: tool({
         description:
-          "Card 1 (Benchmark). Run an AI panel → share-of-voice, citation share, sentiment for the brand vs competitors. Uses saved config unless overrides are given.",
+          "Card 1 (Benchmark). Run an AI panel → share-of-voice, citation share, sentiment for the brand vs competitors.",
         inputSchema: z.object({
           brand: z.string().optional(),
           competitors: z.array(z.string()).optional(),
@@ -168,18 +191,13 @@ export async function POST(req: Request) {
 
       diagnose_citations: tool({
         description:
-          "Card 2 (Diagnose). Categorize where AI cites in this category vs where you're cited, and find the biggest gaps. Crawls top cited pages (respecting robots.txt). Pass report_id from a benchmark, or it runs a fresh one.",
-        inputSchema: z.object({
-          report_id: z.string().optional().describe("A benchmark report_id to analyze."),
-        }),
+          "Card 2 (Diagnose). Categorize where AI cites in this category vs where you're cited; find the biggest gaps. Crawls top cited pages (robots.txt respected) and caches the evidence.",
+        inputSchema: z.object({ report_id: z.string().optional() }),
         async execute({ report_id }) {
           const cfg = await getActiveConfig();
-          let report: FullReport | null = null;
+          let report: FullReport | null = report_id ? await reportById(user, report_id) : null;
           let brand = cfg?.brandName || cfg?.brandUrl || "";
           let ownedDomains = cfg?.brandDomains ?? [];
-          if (report_id) {
-            report = await reportById(user, report_id);
-          }
           if (!report) {
             const r = await runBenchmark(user, cfg, keys);
             if ("error" in r) return { error: r.error };
@@ -187,7 +205,7 @@ export async function POST(req: Request) {
             brand = r.brand;
             ownedDomains = r.ownedDomains;
           }
-          const dx = await diagnoseFromReport(report, { brand, ownedDomains, crawl: true });
+          const dx = await diagnoseAndPersist(user, report, brand, ownedDomains);
           return {
             report_id: report.report_id,
             current_citation_share: dx.currentCitationShare,
@@ -203,10 +221,10 @@ export async function POST(req: Request) {
 
       build_plan: tool({
         description:
-          "Card 3 (Plan). Build a costed action plan for the user's budget + team that fills the biggest citation gaps, with a MODELED projection (target citation share, traffic, conversions, assumptions, confidence). Persists the plan. Pass report_id or it runs a fresh benchmark.",
+          "Card 3 (How can I improve? / Plan). Build a costed action plan filling the biggest citation gaps, EXPAND it into a week-by-week roadmap (actions, owner, hours, deliverable, KPI per week), and persist it. Returns a MODELED projection with assumptions + confidence.",
         inputSchema: z.object({
           report_id: z.string().optional(),
-          budget_usd: z.number().optional().describe("Override the saved budget."),
+          budget_usd: z.number().optional(),
           team_size: z.number().optional(),
           timeline_weeks: z.number().optional(),
         }),
@@ -224,7 +242,7 @@ export async function POST(req: Request) {
             ownedDomains = r.ownedDomains;
             runId = r.report.report_id;
           }
-          const dx = await diagnoseFromReport(report, { brand, ownedDomains, crawl: true });
+          const dx = await diagnoseAndPersist(user, report, brand, ownedDomains);
 
           const budget = input.budget_usd ?? cfg?.budgetUsd ?? 400;
           const team = input.team_size ?? cfg?.teamSize ?? 2;
@@ -238,6 +256,22 @@ export async function POST(req: Request) {
             grounding: { crawl: dx.crawlGrounded },
           });
 
+          // Week-by-week roadmap (manager-shareable detail).
+          let roadmap: unknown[] = [];
+          try {
+            roadmap = await generateRoadmap({
+              anthropicKey: keys.anthropic!,
+              brand,
+              tactics: allocation.tactics,
+              gaps: dx.gap,
+              projection,
+              timelineWeeks: weeks,
+              teamSize: team,
+            });
+          } catch {
+            roadmap = [];
+          }
+
           const saved = await savePlan({
             userId: user.id,
             configId: cfg?.id ?? null,
@@ -245,7 +279,13 @@ export async function POST(req: Request) {
             runId,
             tactics: allocation.tactics,
             projection,
+            roadmap,
           });
+
+          const capacityNote =
+            budget < 100 || team * weeks * 25 < 100
+              ? "NOTE: budget/team capacity is very low — only free, low-effort tactics fit. Suggest the user raise budget or team size in Configure for a stronger plan."
+              : undefined;
 
           return {
             plan_id: saved.id,
@@ -258,20 +298,22 @@ export async function POST(req: Request) {
             spent_hours: allocation.spentHours,
             tactics: allocation.tactics,
             projection,
+            roadmap,
             gap: dx.gap,
+            capacity_note: capacityNote,
           };
         },
       }),
 
       track_progress: tool({
         description:
-          "Card 4 (Track). Pull the user's latest plan and compare their current AI citation share to the plan's baseline. Reports before→after and which tactics are still pending.",
+          "Card 4 (Track). Pull the latest plan, re-benchmark, and report before→after + pending tactics.",
         inputSchema: z.object({
-          done_tactic_ids: z.array(z.string()).optional().describe("Tactic ids the user says are done."),
+          done_tactic_ids: z.array(z.string()).optional(),
         }),
         async execute({ done_tactic_ids }) {
           const plan = await getLatestPlan();
-          if (!plan) return { error: "No plan yet. Build a plan first (Card 3)." };
+          if (!plan) return { error: "No plan yet. Build a plan first (How can I improve?)." };
           const cfg = await getActiveConfig();
           const r = await runBenchmark(user, cfg, keys);
           if ("error" in r) return { error: r.error };
@@ -293,8 +335,63 @@ export async function POST(req: Request) {
           };
         },
       }),
+
+      generate_content: tool({
+        description:
+          "Write GEO-optimized content for a plan tactic: blog_post, comparison_page, reddit_answer, linkedin_post, guest_post_pitch, review_request_email, youtube_brief. Returns ready-to-edit markdown (placeholders where real data is needed).",
+        inputSchema: z.object({
+          type: z.enum(CONTENT_TYPES),
+          topic: z
+            .string()
+            .min(3)
+            .describe("The assignment, e.g. 'PixelBin vs Cloudinary comparison' or 'answer: best background remover'."),
+        }),
+        async execute({ type, topic }) {
+          const cfg = await getActiveConfig();
+          const plan = await getLatestPlan();
+          const planContext = plan
+            ? `Active plan targets citation share ${(plan.projection?.currentCitationShare ?? 0) * 100}% → ${(plan.targetCitationShare ?? 0) * 100}%; tactics: ${plan.tactics.map((t) => t.name).join("; ")}`
+            : undefined;
+          const markdown = await generateContent({
+            anthropicKey: keys.anthropic!,
+            type,
+            topic,
+            brand: cfg?.brandName || cfg?.brandUrl || "the brand",
+            brandUrl: cfg?.brandUrl,
+            description: cfg?.description,
+            competitors: cfg?.competitors,
+            queries: cfg?.queries,
+            planContext,
+          });
+          return { type, topic, markdown };
+        },
+      }),
+
+      save_memory: tool({
+        description:
+          "Persist something worth remembering across sessions. kind: 'structural' (durable facts about the brand/market/results), 'procedural' (how this user wants things done — formats, tone, preferences), 'working' (current goals/in-flight work). Use when the user states a preference, a durable fact emerges, or a goal is set.",
+        inputSchema: z.object({
+          kind: z.enum(["working", "procedural", "structural"]),
+          content: z.string().min(5).max(1200),
+        }),
+        async execute({ kind, content }) {
+          await saveMemory(user.id, kind, content);
+          return { saved: true, kind };
+        },
+      }),
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    originalMessages: body.messages,
+    onFinish: threadId
+      ? async ({ messages }) => {
+          try {
+            await saveThreadMessages(user.id, threadId, messages);
+          } catch (e) {
+            console.error("[chat] thread persistence failed:", e instanceof Error ? e.message : e);
+          }
+        }
+      : undefined,
+  });
 }

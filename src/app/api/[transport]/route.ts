@@ -2,7 +2,7 @@ import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { z } from "zod";
 import { verifyMcpToken, publicOrigin } from "@/lib/mcp/auth";
-import { mcpActiveConfig, mcpSavePlan, McpGeoStore } from "@/lib/mcp/data";
+import { mcpActiveConfig, mcpSavePlan, mcpLatestPlan, McpGeoStore, persistCitations } from "@/lib/mcp/data";
 import {
   InProcessPanelRunner,
   buildReport,
@@ -15,6 +15,8 @@ import {
 } from "@/lib/geo";
 import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
+import { generateRoadmap } from "@/lib/geo/roadmap";
+import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 
 export const maxDuration = 300;
 
@@ -179,6 +181,9 @@ const handler = createMcpHandler(
         if (!report) return text({ error: "Benchmark failed to produce a report." });
 
         const dx = await diagnoseFromReport(report, { brand, ownedDomains, crawl: true });
+        if (dx.crawled?.length) {
+          try { await persistCitations(userId, report.report_id, dx.crawled); } catch { /* best-effort */ }
+        }
         const budget = args.budget_usd ?? cfg?.budgetUsd ?? 400;
         const team = args.team_size ?? cfg?.teamSize ?? 2;
         const weeks = args.timeline_weeks ?? cfg?.timelineWeeks ?? 8;
@@ -189,6 +194,18 @@ const handler = createMcpHandler(
           timelineWeeks: weeks,
           grounding: { crawl: dx.crawlGrounded },
         });
+        let roadmap: unknown[] = [];
+        try {
+          roadmap = await generateRoadmap({
+            anthropicKey: serverProviderKeys().anthropic!,
+            brand,
+            tactics: allocation.tactics,
+            gaps: dx.gap,
+            projection,
+            timelineWeeks: weeks,
+            teamSize: team,
+          });
+        } catch { roadmap = []; }
         const saved = await mcpSavePlan({
           userId,
           configId: cfg?.id ?? null,
@@ -196,14 +213,58 @@ const handler = createMcpHandler(
           runId: report.report_id,
           tactics: allocation.tactics,
           projection,
+          roadmap,
         });
         return text({
           plan_id: saved.id,
           tactics: allocation.tactics,
           projection,
+          roadmap,
           spent_usd: allocation.spentUsd,
           spent_hours: allocation.spentHours,
         });
+      },
+    );
+
+    server.tool(
+      "get_latest_plan",
+      "Fetch the user's most recent action plan (tactics, projection, week-by-week roadmap).",
+      {},
+      async (_args, extra) => {
+        const userId = userIdOf(extra.authInfo);
+        if (!userId) return text({ error: "No user context — install the connector via OAuth." });
+        const plan = await mcpLatestPlan(userId);
+        if (!plan) return text({ error: "No plan yet — run build_plan first." });
+        return text(plan);
+      },
+    );
+
+    server.tool(
+      "generate_content",
+      "Write GEO-optimized content for a tactic: blog_post, comparison_page, reddit_answer, linkedin_post, guest_post_pitch, review_request_email, youtube_brief. Returns markdown.",
+      {
+        type: z.enum(CONTENT_TYPES),
+        topic: z.string().min(3).describe("The assignment, e.g. 'PixelBin vs Cloudinary comparison page'."),
+      },
+      async (args, extra) => {
+        const userId = userIdOf(extra.authInfo);
+        if (!userId) return text({ error: "No user context — install the connector via OAuth." });
+        const cfg = await mcpActiveConfig(userId);
+        const plan = await mcpLatestPlan(userId);
+        const keys = serverProviderKeys();
+        if (!keys.anthropic) return text({ error: "Server Anthropic key missing." });
+        const markdown = await generateContent({
+          anthropicKey: keys.anthropic,
+          type: args.type,
+          topic: args.topic,
+          brand: cfg?.brandName || cfg?.brandUrl || "the brand",
+          brandUrl: cfg?.brandUrl,
+          description: cfg?.description,
+          competitors: cfg?.competitors,
+          queries: cfg?.queries,
+          planContext: plan ? `Tactics: ${plan.tactics.map((t) => t.name).join("; ")}` : undefined,
+        });
+        return text({ type: args.type, topic: args.topic, markdown });
       },
     );
   },

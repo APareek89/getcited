@@ -12,6 +12,8 @@ export interface PanelAnswer {
   model: string;
   text: string;
   usage: TokenUsage;
+  /** REAL cited source URLs returned by web-grounded providers (Perplexity/Gemini). */
+  sources: string[];
 }
 
 /** A single "AI search panelist" — asks a buyer-intent prompt, returns an answer. */
@@ -42,8 +44,14 @@ export function createRealPanelist(id: PanelistId, keys: ProviderKeys): Panelist
         system: PANELIST_SYSTEM,
         prompt,
         maxOutputTokens: 600,
+        experimental_telemetry: { isEnabled: true, functionId: `panelist.${id}` },
       });
-      return { model: modelId, text: res.text, usage: normalizeUsage(res.usage) };
+      // Web-grounded providers (Perplexity sonar) return the ACTUAL cited pages as
+      // sources — the evidence the plan is built on. Don't rely on text regex alone.
+      const sources = (res.sources ?? [])
+        .map((s) => ("url" in s && typeof s.url === "string" ? s.url : null))
+        .filter((u): u is string => Boolean(u));
+      return { model: modelId, text: res.text, usage: normalizeUsage(res.usage), sources };
     },
   };
 }
@@ -66,7 +74,7 @@ export function createMockPanelist(id: string, brand: string, competitors: strin
         .map((m) => `${m} (${m.toLowerCase().replace(/[^a-z0-9]+/g, "")}.com)`)
         .join(", ");
       const text = `For "${prompt}", strong options I'd recommend include ${cites}. These are great, reliable choices.`;
-      return { model: `mock:${id}`, text, usage: { inputTokens: 0, outputTokens: 0 } };
+      return { model: `mock:${id}`, text, usage: { inputTokens: 0, outputTokens: 0 }, sources: [] };
     },
   };
 }

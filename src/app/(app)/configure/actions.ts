@@ -31,12 +31,35 @@ const SaveSchema = z.object({
   brandName: z.string().trim().max(120).optional().or(z.literal("")),
   description: z.string().trim().max(1000).optional().or(z.literal("")),
   competitors: z.array(z.string().trim().min(1).max(300)).max(15),
+  // Parallel to competitors; "" when unknown (e.g. user typed a plain name).
+  competitorDomains: z.array(z.string().trim().max(300)).max(15).optional(),
   queries: z.array(z.string().trim().min(1).max(400)).max(30),
   budgetUsd: z.number().min(0).max(1_000_000),
   teamSize: z.number().int().min(1).max(100),
   timelineWeeks: z.number().int().min(1).max(104),
   mode: z.enum(["we_serve", "self_serve"]).default("we_serve"),
 });
+
+/**
+ * Competitors must be stored as brand NAMES (mention matching in AI answers) plus a
+ * parallel domain (citation attribution). A URL-ish entry is split into both; a plain
+ * name keeps the provided/empty domain. (Storing raw URLs as "names" was why SoV came
+ * back empty — the parser can't find "https://runwayml.com" in prose.)
+ */
+function competitorNameAndDomain(entry: string, providedDomain?: string): { name: string; domain: string } {
+  const trimmed = entry.trim();
+  const urlish = /^https?:\/\//i.test(trimmed) || (!trimmed.includes(" ") && /\.[a-z]{2,}$/i.test(trimmed));
+  if (urlish) {
+    try {
+      const host = new URL(normalizeUrl(trimmed)).host.replace(/^www\./, "").toLowerCase();
+      const base = host.split(".")[0] ?? host;
+      return { name: base.charAt(0).toUpperCase() + base.slice(1), domain: host };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { name: trimmed, domain: (providedDomain ?? "").toLowerCase() };
+}
 
 /** Derive candidate owned domains from a brand URL (host + apex). */
 function deriveDomains(brandUrl: string): string[] {
@@ -59,13 +82,15 @@ export async function saveConfigAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid config" };
   }
   const v = parsed.data;
+  const pairs = v.competitors.map((c, i) => competitorNameAndDomain(c, v.competitorDomains?.[i]));
   try {
     const saved = await saveConfigVersion(user.id, {
       brandUrl: normalizeUrl(v.brandUrl),
       brandName: v.brandName || null,
       description: v.description || null,
       brandDomains: deriveDomains(v.brandUrl),
-      competitors: v.competitors.map(normalizeUrl),
+      competitors: pairs.map((p) => p.name),
+      competitorDomains: pairs.map((p) => p.domain),
       queries: v.queries,
       budgetUsd: v.budgetUsd,
       teamSize: v.teamSize,

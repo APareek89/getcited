@@ -136,12 +136,23 @@ export class InProcessPanelRunner implements PanelRunner {
             meter.add(answer.model, answer.usage);
             const parsed = await this.callParser(parser, answer.text, input);
             meter.add(PARSER_MODEL_ID, parsed.usage);
+            // Merge REAL provider sources (Perplexity) with text-extracted domains.
+            const sourceDomains = answer.sources
+              .map((u) => {
+                try {
+                  return new URL(u).host.replace(/^www\./, "").toLowerCase();
+                } catch {
+                  return null;
+                }
+              })
+              .filter((d): d is string => Boolean(d));
+            const citedDomains = Array.from(new Set([...parsed.citedDomains, ...sourceDomains]));
             persisted.push({
               model: answer.model,
               prompt,
               rawAnswer: answer.text,
               mentions: parsed.mentions,
-              citedDomains: parsed.citedDomains,
+              citedDomains,
               sentiment: parsed.sentiment,
             });
           }

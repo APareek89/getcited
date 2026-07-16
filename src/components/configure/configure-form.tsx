@@ -55,6 +55,10 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   const [competitors, setCompetitors] = useState<string[]>(
     padTo(initial?.competitors ?? [], 5, ""),
   );
+  // Parallel domains (same index as competitors); filled by Suggest, "" otherwise.
+  const [competitorDomains, setCompetitorDomains] = useState<string[]>(
+    padTo(initial?.competitorDomains ?? [], 5, ""),
+  );
   const [queries, setQueries] = useState<string[]>(initial?.queries ?? []);
   const [newQuery, setNewQuery] = useState("");
   const [budget, setBudget] = useState<string>(String(initial?.budgetUsd ?? 400));
@@ -65,12 +69,16 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
 
   function setCompetitor(i: number, val: string) {
     setCompetitors((prev) => prev.map((c, idx) => (idx === i ? val : c)));
+    // Manual edit invalidates the suggested domain pairing for that slot.
+    setCompetitorDomains((prev) => prev.map((d, idx) => (idx === i ? "" : d)));
   }
   function addCompetitor() {
     setCompetitors((prev) => [...prev, ""]);
+    setCompetitorDomains((prev) => [...prev, ""]);
   }
   function removeCompetitor(i: number) {
     setCompetitors((prev) => prev.filter((_, idx) => idx !== i));
+    setCompetitorDomains((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function addQuery() {
@@ -99,10 +107,22 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       toast.error(res.error);
       return;
     }
-    const urls = res.data.map((c) => c.url);
+    // Fill NAMES into the inputs (mention matching needs names, not URLs) and keep
+    // the domain paired in the parallel array for citation attribution.
     setCompetitors((prev) => {
-      const existing = prev.filter((c) => c.trim());
-      const merged = Array.from(new Set([...existing, ...urls]));
+      const keepNames = prev.filter((c) => c.trim());
+      const merged = [...keepNames];
+      const mergedDomains = [...competitorDomains.slice(0, keepNames.length)];
+      for (const c of res.data) {
+        if (merged.some((m) => m.toLowerCase() === c.name.toLowerCase())) continue;
+        merged.push(c.name);
+        try {
+          mergedDomains.push(new URL(c.url).host.replace(/^www\./, "").toLowerCase());
+        } catch {
+          mergedDomains.push("");
+        }
+      }
+      setCompetitorDomains(padTo(mergedDomains, Math.max(5, merged.length), ""));
       return padTo(merged, 5, "");
     });
     toast.success(`Found ${res.data.length} competitors`);
@@ -134,11 +154,15 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       return;
     }
     startTransition(async () => {
+      const kept = competitors
+        .map((c, i) => ({ name: c.trim(), domain: competitorDomains[i] ?? "" }))
+        .filter((c) => c.name);
       const res = await saveConfigAction({
         brandUrl,
         brandName: brandName || undefined,
         description: description || undefined,
-        competitors: competitors.filter((c) => c.trim()),
+        competitors: kept.map((c) => c.name),
+        competitorDomains: kept.map((c) => c.domain),
         queries,
         budgetUsd: Number(budget) || 0,
         teamSize: Number(teamSize) || 1,
@@ -232,7 +256,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
           {competitors.map((c, i) => (
             <div key={i} className="flex items-center gap-2">
               <Input
-                placeholder={`competitor-${i + 1}.com`}
+                placeholder={`Competitor ${i + 1} name (or paste their URL)`}
                 value={c}
                 onChange={(e) => setCompetitor(i, e.target.value)}
               />

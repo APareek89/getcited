@@ -6,6 +6,21 @@
 
 <!-- Newest first. -->
 
+## 2026-07-16 — Thin insights: competitors-as-URLs + dropped Perplexity sources
+**What happened:** User's real benchmark returned thin insights (mentions=[] on most answers,
+sonar answers with zero citations, citations table empty, plan target only ~5%).
+**Root cause (4 stacked):** (1) Configure saved competitors as normalized URLs — the parser
+can't match "https://runwayml.com" as a brand mention in prose; (2) Perplexity's REAL cited
+sources come back on `res.sources`, which we discarded (only regexed the text); (3) crawled
+evidence was never persisted to the `citations` table; (4) the user's config had budget=$0,
+team=1 → only free tactics fit, so the projection was tiny.
+**Fix:** competitors stored as NAMES + parallel `competitor_domains` (derived server-side);
+panelist captures `res.sources` → merged into cited_domains; `persistCitations()` after every
+diagnose crawl; plan tool returns a capacity_note when budget/team is tiny.
+**Watch for later:** if SoV comes back near-zero for all brands, check what strings are in
+`configs.competitors` FIRST. Old configs saved before this fix still hold URLs — user must
+re-save Configure (or re-run Suggest) to get names.
+
 ## 2026-07-16 — Shared Supabase project hijacked the auth redirect
 **What happened:** After sign-up, the user landed on `agentic-learning-studio-1.onrender.com/?code=...`
 — a different app sharing the same Supabase project.
