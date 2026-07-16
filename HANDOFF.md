@@ -14,6 +14,14 @@
 - At the **start of each phase**, tell the user exactly which `.env.local` keys it needs.
 - Do **not** edit the reference project `geo-radar-mcp` — read-only port source.
 
+## Session continuity (Power Coding)
+- **Resume a fresh session:** type `Refer to Handoff.MD in /Users/anandpareek/Documents/Projects/GetCited and begin`.
+- Update this file after every major change (snapshot, not a journal — one screen). At ~10% context left, update it early and tell the user the magic phrase.
+- Log flow changes / reported bugs (with root cause) in `Learning.MD` — check it before debugging.
+- `Loop.MD` holds the eval yardstick; offer to turn the loop on once the first draft runs end-to-end.
+- FMEA is `smart_suggest` (`.power-coding/config.json`) — suggest a scan at a natural pause when signals fire.
+- ⚠️ unconfirmed defaults: debug = **(A) diagrams only**; FMEA trigger = **smart_suggest**. Tell me to change either.
+
 ## Reference port map (geo-radar-mcp → GetCited/lib/geo)
 `packages/core/src/{panelist,parser,providers,models,scoring,cost,prompt-library,analysis,compare,report,errors,runner}.ts`
 → `lib/geo/*`. **Adapt: provider keys become a per-call param, not `process.env`.** Drop MCP

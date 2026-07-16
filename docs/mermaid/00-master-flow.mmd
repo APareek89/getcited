@@ -1,0 +1,61 @@
+%% GetCited — MASTER FLOW
+%% intended — not yet fully built (Phase 1 in progress)
+flowchart TD
+  U["User (signed in)<br/>[DATA · Supabase auth.users]<br/>in: email/Google login<br/>out: user_id"]:::data
+
+  CFG["Configure page<br/>[FUNCTION]<br/>in: brand URL, competitors x5, budget, team size<br/>out: versioned config row"]:::fn
+  CFGDB["configs<br/>[DATA · Supabase/Drizzle, RLS by user_id]<br/>in: config fields + version<br/>out: latest config"]:::data
+  SUG["suggest_queries<br/>[AGENT · Claude]<br/>in: brand + description (+Google Suggest/Perplexity)<br/>out: editable buyer-intent prompts"]:::agent
+  DISC["discover_competitors<br/>[AGENT · Claude]<br/>in: brand URL<br/>out: suggested competitor URLs"]:::agent
+
+  CARDS{"Agent Mode card chosen?<br/>[FUNCTION decides route]"}:::dec
+
+  BENCH["Card 1 Benchmark<br/>[FUNCTION → pipeline]<br/>in: config<br/>out: SoV + citations + sentiment"]:::fn
+  DIAG["Card 2 Diagnose<br/>[FUNCTION → crawl]<br/>in: competitor citations<br/>out: gap analysis (why they win)"]:::fn
+  PLAN["Card 3 Plan<br/>[FUNCTION → plan.ts]<br/>in: gaps + budget + team<br/>out: costed tactics + projection"]:::fn
+  TRACK["Card 4 Track<br/>[FUNCTION → crawl verify]<br/>in: prior plan + what's done<br/>out: before→after + pending"]:::fn
+
+  PANEL["Panel run<br/>[AGENT · Claude/Perplexity/Gemini/Groq]<br/>in: prompts, per-user keys<br/>out: raw AI answers (real-if-key-else-mock)"]:::agent
+  PARSE["Parse answers<br/>[AGENT · Claude Haiku]<br/>in: raw answer + candidate brands<br/>out: mentions, cited_domains, sentiment"]:::agent
+  SCORE["computeShareOfVoice / computeCitations<br/>[FUNCTION]<br/>in: parsed answers<br/>out: SoV, citation share, per-prompt"]:::fn
+  RUNDB["runs / answers / sov_history<br/>[DATA · Supabase]<br/>in: persisted answers<br/>out: report_id, trends"]:::data
+
+  CAP["Cost cap gate<br/>[FUNCTION · spend + est*2 ≤ PANEL_COST_CAP_USD_PER_RUN]"]:::fn
+
+  CRAWL["crawlCitations<br/>[LIBRARY · Firecrawl → fetch/readability]<br/>in: cited/competitor URLs (respect robots.txt + rate limit)<br/>out: readable content + source_type + signals"]:::data
+  CITEDB["citations<br/>[DATA · Supabase cache]<br/>in: crawl evidence<br/>out: citation profile per competitor"]:::data
+
+  GAP["Gap vs leader<br/>[FUNCTION]<br/>in: your profile vs leader profile<br/>out: biggest deficits per source type"]:::fn
+  ALLOC["allocatePlan (greedy knapsack)<br/>[FUNCTION · budget + teamSize*weeks*25h]<br/>in: gaps + tactic library<br/>out: chosen tactics (lift per cost+effort, gap-first)"]:::fn
+  PROJ["projectImpact<br/>[FUNCTION]<br/>in: selected tactics (+GSC/Perplexity/Ahrefs if present)<br/>out: target share, traffic, conversions, assumptions, confidence"]:::fn
+  CONF{"Grounded by real data?<br/>[FUNCTION]"}:::dec
+  REPORT["generate_report<br/>[LIBRARY · @react-pdf / exceljs / HTML]<br/>in: plan + projection<br/>out: downloadable artifact + Storage URL"]:::data
+
+  U --> CFG
+  CFG --> CFGDB
+  CFG -. optional .-> SUG
+  CFG -. optional .-> DISC
+  CFGDB --> CARDS
+
+  CARDS -->|Benchmark| BENCH
+  CARDS -->|Diagnose| DIAG
+  CARDS -->|Plan| PLAN
+  CARDS -->|Track| TRACK
+
+  BENCH --> PANEL
+  CAP --> PANEL
+  PANEL --> PARSE --> SCORE --> RUNDB
+
+  DIAG --> CRAWL --> CITEDB --> GAP
+  PLAN --> GAP
+  GAP --> ALLOC --> PROJ --> CONF
+  CONF -->|"GSC/Perplexity/Ahrefs present"| REPORT
+  CONF -->|"no grounding → confidence medium/low"| REPORT
+  TRACK --> CRAWL
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+  classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;

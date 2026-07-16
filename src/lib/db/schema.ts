@@ -1,0 +1,222 @@
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  real,
+  integer,
+  boolean,
+  date,
+  jsonb,
+  index,
+} from "drizzle-orm/pg-core";
+
+/**
+ * GetCited Postgres schema (Drizzle) on Supabase. Build spec §7.
+ *
+ * Every user-owned table carries `user_id` (= Supabase `auth.users.id`) and has
+ * Row-Level Security enabled with `auth.uid() = user_id` policies (see the RLS
+ * migration) so a user can only ever read/write their own rows. We deliberately do
+ * NOT declare a cross-schema FK to `auth.users` in Drizzle — the link is enforced by
+ * RLS + the `profiles` trigger in raw SQL. `text().array()` → Postgres `text[]`.
+ */
+
+// profiles ↔ auth.users (id is the auth user id; row auto-created by a trigger)
+export const profiles = pgTable("profiles", {
+  id: uuid("id").primaryKey(),
+  email: text("email"),
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Versioned config, one active row per user. New saves append a new version.
+export const configs = pgTable(
+  "configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    version: integer("version").notNull().default(1),
+    isActive: boolean("is_active").notNull().default(true),
+    brandUrl: text("brand_url").notNull(),
+    brandName: text("brand_name"),
+    description: text("description"),
+    brandDomains: text("brand_domains").array().notNull().default([]),
+    competitors: text("competitors").array().notNull().default([]),
+    queries: text("queries").array().notNull().default([]),
+    budgetUsd: real("budget_usd").notNull().default(0),
+    teamSize: integer("team_size").notNull().default(1),
+    timelineWeeks: integer("timeline_weeks").notNull().default(8),
+    // we_serve | self_serve
+    mode: text("mode").notNull().default("we_serve"),
+    // trust_us | own_instance | code_base (Self Serve platform choice)
+    platformOption: text("platform_option"),
+    instanceUrl: text("instance_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("configs_user_active_idx").on(t.userId, t.isActive)],
+);
+
+// Opt-in encrypted BYO keys (AES-GCM). Plaintext is NEVER stored or logged.
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    provider: text("provider").notNull(),
+    ciphertext: text("ciphertext").notNull(),
+    iv: text("iv").notNull(),
+    authTag: text("auth_tag").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("api_keys_user_provider_idx").on(t.userId, t.provider)],
+);
+
+// A panel run (measure share-of-voice). Mirrors geo-radar panel_runs + user scope.
+export const runs = pgTable(
+  "runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    configId: uuid("config_id"),
+    brand: text("brand").notNull(),
+    brandDomains: text("brand_domains").array().notNull().default([]),
+    competitors: text("competitors").array().notNull().default([]),
+    panel: text("panel").array().notNull().default([]),
+    // queued | running | completed | failed
+    status: text("status").notNull().default("queued"),
+    costUsd: real("cost_usd").notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("runs_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+export const answers = pgTable(
+  "answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    model: text("model").notNull(),
+    prompt: text("prompt").notNull(),
+    rawAnswer: text("raw_answer").notNull(),
+    mentions: text("mentions").array().notNull().default([]),
+    citedDomains: text("cited_domains").array().notNull().default([]),
+    sentiment: text("sentiment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("answers_run_idx").on(t.runId)],
+);
+
+export const sovHistory = pgTable(
+  "sov_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    configId: uuid("config_id"),
+    runId: uuid("run_id"),
+    date: date("date").notNull(),
+    sov: real("sov").notNull(),
+    citationShare: real("citation_share"),
+    sentimentScore: real("sentiment_score"),
+  },
+  (t) => [index("sov_history_user_date_idx").on(t.userId, t.date)],
+);
+
+export const hallucinations = pgTable("hallucinations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  claim: text("claim").notNull(),
+  contradictsFact: text("contradicts_fact").notNull(),
+  severity: text("severity").notNull(),
+  model: text("model"),
+  prompt: text("prompt"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Crawled citation evidence (Diagnose/Plan/Track). Cached to avoid re-crawling.
+export const citations = pgTable(
+  "citations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    runId: uuid("run_id"),
+    url: text("url").notNull(),
+    domain: text("domain"),
+    // roundup | review | editorial | youtube | reddit | owned | social | other
+    sourceType: text("source_type").notNull().default("other"),
+    citesCompetitor: text("cites_competitor"),
+    mentionsBrand: boolean("mentions_brand").notNull().default(false),
+    signals: jsonb("signals").$type<Record<string, unknown>>(),
+    title: text("title"),
+    excerpt: text("excerpt"),
+    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("citations_user_url_idx").on(t.userId, t.url)],
+);
+
+// A costed action plan + its modeled projection.
+export const plans = pgTable(
+  "plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    configId: uuid("config_id"),
+    configVersion: integer("config_version"),
+    runId: uuid("run_id"),
+    tactics: jsonb("tactics").$type<unknown[]>().notNull().default([]),
+    projection: jsonb("projection").$type<Record<string, unknown>>(),
+    targetCitationShare: real("target_citation_share"),
+    timelineWeeks: integer("timeline_weeks"),
+    // high | medium | low
+    confidence: text("confidence"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("plans_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+// Track: what the user actually did + verification evidence, diffed vs the plan.
+export const progressSnapshots = pgTable("progress_snapshots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  planId: uuid("plan_id").notNull(),
+  doneTactics: jsonb("done_tactics").$type<unknown[]>().notNull().default([]),
+  evidence: jsonb("evidence").$type<Record<string, unknown>>(),
+  sov: real("sov"),
+  citationShare: real("citation_share"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Generated report artifacts (HTML/PDF/Excel) with their Supabase Storage path.
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    runId: uuid("run_id"),
+    planId: uuid("plan_id"),
+    // benchmark | diagnose | plan | track
+    kind: text("kind").notNull(),
+    // html | pdf | excel
+    format: text("format").notNull(),
+    title: text("title"),
+    storagePath: text("storage_path"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("reports_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+export type ProfileRow = typeof profiles.$inferSelect;
+export type ConfigRow = typeof configs.$inferSelect;
+export type ConfigInsert = typeof configs.$inferInsert;
+export type ApiKeyRow = typeof apiKeys.$inferSelect;
+export type RunRow = typeof runs.$inferSelect;
+export type AnswerRow = typeof answers.$inferSelect;
+export type SovHistoryRow = typeof sovHistory.$inferSelect;
+export type HallucinationRow = typeof hallucinations.$inferSelect;
+export type CitationRow = typeof citations.$inferSelect;
+export type PlanRow = typeof plans.$inferSelect;
+export type ProgressSnapshotRow = typeof progressSnapshots.$inferSelect;
+export type ReportRow = typeof reports.$inferSelect;
