@@ -35,8 +35,8 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 
 ## Phases
 0. **Setup + Supabase** ← DONE (scaffold, deps, theme, env, green build)
-1. Scaffold polish + port `lib/geo` (per-user keys) + Supabase Auth + schema/migrations + landing + Configure (+suggest_queries, +discover_competitors)
-2. GEO Assistant: Agent-Mode streaming chat + MCP page (tool-call cards, model selector)
+1. **Port `lib/geo` + Supabase Auth + schema/migrations + landing + Configure** ← DONE
+2. GEO Assistant: Agent-Mode streaming chat + MCP page (tool-call cards, model selector) ← NEXT
 3. Crawling + scoring engine (`plan.ts` allocator + `projectImpact`) + cards 1–4 + reports (PDF/Excel/HTML) — **unit tests required**
 4. Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted-stored)
 5. Dashboard (KPIs, trend, leaderboard, active plan/progress, alerts, downloads)
@@ -49,23 +49,34 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 - **Optional (as features land):** `GEMINI_API_KEY`, `GROQ_API_KEY` ✅(copied), `YOUTUBE_API_KEY`,
   `GA4_*`, `GSC_*`, `AHREFS_API_TOKEN`.
 
-## Current state (end of Phase 0)
-- `create-next-app` scaffolded (folder had capitals → scaffolded to lowercase subdir then moved up).
-- Deps installed: framer-motion, recharts, lucide-react, drizzle-orm/kit, postgres, ai + @ai-sdk/{anthropic,google,groq,perplexity}, @supabase/{supabase-js,ssr}, zod, exceljs, @react-pdf/renderer; dev: vitest, tsx, dotenv.
-- shadcn/ui initialized (Base UI). Base components added: button, card, input, label, textarea, badge, tooltip, tabs, select, separator, skeleton, sonner, dialog, scroll-area.
-- **Theme:** dark-by-default (`<html class="dark">`), GetCited §8 tokens in `globals.css` (bg #0B0D10, card #14171C, accent #635BFF, pos #2FBF71, warn #E0A32E, danger #E5484D, text #E6E8EB, muted #8A9099), Inter font. Extra tokens: `--positive`, `--warning` (exposed via `@theme` as `positive`/`warning`).
-- `layout.tsx`: Inter + TooltipProvider (`delay` prop — Base UI, not `delayDuration`) + Toaster (sonner).
-- `page.tsx`: minimal dark hero placeholder ("Get cited by AI. Know exactly what to do.").
-- Scripts: `dev build start lint typecheck test test:watch`. `vitest.config.ts` (passWithNoTests until Phase 3).
-- **Green:** `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ · `pnpm build` ✅.
+## Current state (end of Phase 1)
+- **Scaffold/theme** (Phase 0): Next 16 + Tailwind v4 + shadcn (Base UI), dark §8 tokens, Inter.
+- **Supabase DB (SHARED project — see Learning.MD):** 11 RLS tables (§7); migrations `drizzle/0000` tables,
+  `0001` RLS+profiles trigger, `0002` namespaced auth trigger (`getcited_*`). Applied. `scripts/db-check.ts`
+  verifies tables/RLS/trigger. `src/lib/db/{schema,client,configs}.ts`, `drizzle.config.ts`.
+- **Auth (Supabase SSR):** `src/lib/supabase/{server,client,middleware}.ts`, `src/proxy.ts` (Next 16 "proxy"
+  convention guards `/configure /assistant /dashboard`), `src/lib/auth.ts` (getUser/requireUser). Login page
+  = Google OAuth + email magic-link (NO passwords). `/auth/callback` + `/auth/signout` routes.
+- **Ported pipeline** `src/lib/geo/*` (per-user keys, not env): types, models, providers, panelist, parser,
+  scoring, cost, prompt-library, analysis, errors, store + MemoryGeoStore, runner, report, keys (server-only),
+  assist (suggest_queries + discover_competitors, Google-Suggest grounded). Barrel `index.ts` (excludes
+  server-only `keys`). Tests: scoring (4) + mock runner e2e (3) = 7 passing.
+- **Landing** `/`: hero + We Serve/Self Serve split + live **free mock audit** (`/api/mock-audit` runs the
+  real runner in forceMock; CSS bars, not Recharts — Recharts vertical-layout mis-scaled, see Learning).
+- **App shell** `src/app/(app)/layout.tsx` (requireUser) + `AppShell` left nav (Configure/Assistant/Dashboard).
+- **Configure** `/configure`: brand/name/description, competitors ×5 + ＋ + "Suggest competitors",
+  queries + "Fetch queries", budget/team/timeline, `?` tooltips, versioned save. Server actions in
+  `src/app/(app)/configure/actions.ts` (saveConfig, suggestQueries, discoverCompetitors). Assistant/Dashboard = stubs.
+- **Verified in browser:** landing + mock audit (SoV bars), login page, protected-route redirect. Console clean.
+- **Green:** `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` (7) ✅ · `pnpm build` ✅.
 
-## Gotchas learned
-- Folder `GetCited` has capitals → npm rejects as package name. Scaffolded into `getcited/` then moved contents up.
-- pnpm 11 gates build scripts; approve in `pnpm-workspace.yaml` (`allowBuilds` + `onlyBuiltDependencies`): sharp, unrs-resolver, esbuild.
-- shadcn `init -b` = base library (radix|base), NOT base color. This install uses **Base UI** primitives.
-- Corp MITM proxy: export `NODE_EXTRA_CA_CERTS`/`SSL_CERT_FILE`=`/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem` before npm/pnpm/npx.
+## Gotchas learned (see Learning.MD for full list)
+- Base UI (not Radix): Button uses `render` prop not `asChild` → use `ButtonLink`; Tooltip uses `delay`.
+- Recharts v3 horizontal/vertical bar layout mis-scales domain with a hidden axis → used CSS bars for the SoV list.
+- pnpm 11 build-script gating; corp MITM proxy CA bundle; `GetCited` caps → lowercase scaffold subdir.
+- **Supabase project is SHARED** — namespace any global/auth-schema objects with `getcited_`.
 
-## Next: Phase 1
-Create Supabase project (Auth email+Google), get the 4 Supabase env values, then: port `lib/geo`
-(provider keys as per-call param), Drizzle schema on Supabase + RLS, Supabase Auth, landing page,
-Configure page (brand/competitors×5+＋/queries/budget/team) + `suggest_queries` + `discover_competitors`.
+## Next: Phase 2 — GEO Assistant
+Vercel AI SDK streaming chat calling `lib/geo` tools (tool-call cards, model selector) + MCP page.
+Will need a Supabase-backed GeoStore (implement `SupabaseGeoStore` when real runs get persisted) and the
+BENCHMARK card wired to `InProcessPanelRunner` with `serverProviderKeys()`.

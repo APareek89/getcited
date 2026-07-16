@@ -14,7 +14,6 @@ import * as schema from "./schema";
  * client (`createServerSupabase`) instead.
  */
 declare global {
-  // eslint-disable-next-line no-var
   var __getcitedPg: ReturnType<typeof postgres> | undefined;
 }
 
