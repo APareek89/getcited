@@ -1,0 +1,9 @@
+{
+  "last_scan": {
+    "ref": "64861d1cff343775abc14b1bed9472b5e789ad61",
+    "scope": "Phase 1 (auth, RLS, config, AI assist)",
+    "found": { "p0": 0, "p1": 4, "p2": 4 },
+    "fixed_now": ["#1 middleware fail-closed", "#2 insert-first config save", "#3 unique(user_id,version)", "#4 assist rate limit", "#5 googleSuggest timeout"],
+    "tracked_p2": ["#6 mock-audit public rate limit", "#7 server-side observability/logger", "#8 Drizzle client RLS-bypass discipline"]
+  }
+}

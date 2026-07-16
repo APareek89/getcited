@@ -33,15 +33,22 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANT: getUser() (not getSession) revalidates the token with Supabase.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
+
+  // FMEA #1: never let a Supabase auth blip 500 the whole site (incl. public pages).
+  // On error, treat as unauthenticated — public routes still render, protected routes
+  // fail CLOSED (redirect to /login) rather than exposing anything.
+  let user = null;
+  try {
+    // IMPORTANT: getUser() (not getSession) revalidates the token with Supabase.
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    user = null;
+  }
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();

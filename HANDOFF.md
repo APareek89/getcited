@@ -76,6 +76,14 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 - pnpm 11 build-script gating; corp MITM proxy CA bundle; `GetCited` caps → lowercase scaffold subdir.
 - **Supabase project is SHARED** — namespace any global/auth-schema objects with `getcited_`.
 
+## FMEA (Phase 1 scan, 2026-07-16) — P1s fixed, P2s tracked
+Fixed: #1 middleware fail-closed on Supabase auth error; #2 config save inserts-first
+(no lost active config); #3 unique `(user_id,version)` index; #4 per-user rate limit on
+suggest/discover (our-key Claude); #5 googleSuggest 3s timeout.
+**Tracked (P2, do later):** #6 rate-limit public `/api/mock-audit`; #7 add server-side
+observability/logger (dropped in port — currently errors only surface as client toasts);
+#8 when `SupabaseGeoStore` uses the Drizzle service client (RLS bypass), always scope by user_id.
+
 ## Next: Phase 2 — GEO Assistant
 Vercel AI SDK streaming chat calling `lib/geo` tools (tool-call cards, model selector) + MCP page.
 Will need a Supabase-backed GeoStore (implement `SupabaseGeoStore` when real runs get persisted) and the

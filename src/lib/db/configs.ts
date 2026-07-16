@@ -85,8 +85,11 @@ export async function listConfigVersions(): Promise<ConfigView[]> {
 }
 
 /**
- * Save a new config version: deactivate the current active row(s), then insert a new
- * versioned, active row. `userId` sets the RLS-checked owner column.
+ * Save a new config version. FMEA #2/#3: INSERT the new active row FIRST, then
+ * deactivate the others — so a failed insert leaves the previous active config intact
+ * (no "lost config"). A unique (user_id, version) index (migration 0003) makes a
+ * concurrent double-save fail on the loser instead of duplicating a version. `userId`
+ * sets the RLS-checked owner column.
  */
 export async function saveConfigVersion(
   userId: string,
@@ -103,12 +106,7 @@ export async function saveConfigVersion(
   if (latestErr) throw new Error(latestErr.message);
   const nextVersion = (latest?.version ?? 0) + 1;
 
-  const { error: deactivateErr } = await supabase
-    .from("configs")
-    .update({ is_active: false })
-    .eq("is_active", true);
-  if (deactivateErr) throw new Error(deactivateErr.message);
-
+  // 1) Insert the new active row first.
   const { data, error } = await supabase
     .from("configs")
     .insert({
@@ -130,6 +128,25 @@ export async function saveConfigVersion(
     })
     .select("*")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    // 23505 = unique_violation → a concurrent save grabbed this version.
+    if ((error as { code?: string }).code === "23505") {
+      throw new Error("Another save just happened — please try again.");
+    }
+    throw new Error(error.message);
+  }
+
+  // 2) Deactivate every OTHER active row (the previous active version(s)).
+  const { error: deactivateErr } = await supabase
+    .from("configs")
+    .update({ is_active: false })
+    .eq("is_active", true)
+    .neq("id", data.id);
+  // Non-fatal: the new row has the highest version so getActiveConfig still resolves
+  // to it; a stale extra active row will be tidied on the next successful save.
+  if (deactivateErr) {
+    console.error("[configs] deactivate-others failed (non-fatal):", deactivateErr.message);
+  }
+
   return mapRow(data);
 }

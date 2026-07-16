@@ -22,6 +22,13 @@
       "when": 1784204883096,
       "tag": "0002_namespace_auth_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784207154664,
+      "tag": "0003_configs_version_unique",
+      "breakpoints": true
     }
   ]
 }

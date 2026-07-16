@@ -9,6 +9,7 @@ import {
   date,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -53,7 +54,11 @@ export const configs = pgTable(
     instanceUrl: text("instance_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("configs_user_active_idx").on(t.userId, t.isActive)],
+  (t) => [
+    index("configs_user_active_idx").on(t.userId, t.isActive),
+    // FMEA #3: prevent concurrent saves from duplicating a version number.
+    uniqueIndex("configs_user_version_unique").on(t.userId, t.version),
+  ],
 );
 
 // Opt-in encrypted BYO keys (AES-GCM). Plaintext is NEVER stored or logged.

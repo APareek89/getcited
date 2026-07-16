@@ -34,9 +34,10 @@ const CompetitorsSchema = z.object({
 export async function googleSuggest(term: string, signal?: AbortSignal): Promise<string[]> {
   try {
     const url = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(term)}`;
+    // FMEA #5: cap the wait so a slow/unresponsive upstream can't hang the action.
     const res = await fetch(url, {
       headers: { "user-agent": "GetCited/1.0 (+https://getcited.app)" },
-      signal,
+      signal: signal ?? AbortSignal.timeout(3000),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as [string, string[]];

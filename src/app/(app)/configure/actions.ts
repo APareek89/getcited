@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { saveConfigVersion, type ConfigView } from "@/lib/db/configs";
 import { serverProviderKeys } from "@/lib/geo/keys";
+import { checkRateLimit } from "@/lib/rate-limit";
 import {
   suggestQueries,
   discoverCompetitors,
@@ -12,6 +13,9 @@ import {
 } from "@/lib/geo/assist";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+// FMEA #4: cap our-key Claude usage per user for the assist actions.
+const ASSIST_LIMIT = { limit: 15, windowMs: 60_000 };
 
 const urlish = z.string().trim().min(3).max(300);
 
@@ -79,7 +83,11 @@ const SuggestSchema = z.object({
 export async function suggestQueriesAction(
   raw: z.input<typeof SuggestSchema>,
 ): Promise<ActionResult<string[]>> {
-  await requireUser("/configure");
+  const user = await requireUser("/configure");
+  const rl = checkRateLimit(`assist:${user.id}`, ASSIST_LIMIT);
+  if (!rl.ok) {
+    return { ok: false, error: `Too many requests — try again in ${Math.ceil(rl.retryAfterMs / 1000)}s` };
+  }
   const parsed = SuggestSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "Enter a brand first" };
   const keys = serverProviderKeys();
@@ -103,7 +111,11 @@ const DiscoverSchema = z.object({
 export async function discoverCompetitorsAction(
   raw: z.input<typeof DiscoverSchema>,
 ): Promise<ActionResult<{ name: string; url: string }[]>> {
-  await requireUser("/configure");
+  const user = await requireUser("/configure");
+  const rl = checkRateLimit(`assist:${user.id}`, ASSIST_LIMIT);
+  if (!rl.ok) {
+    return { ok: false, error: `Too many requests — try again in ${Math.ceil(rl.retryAfterMs / 1000)}s` };
+  }
   const parsed = DiscoverSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "Enter your brand URL first" };
   const keys = serverProviderKeys();
