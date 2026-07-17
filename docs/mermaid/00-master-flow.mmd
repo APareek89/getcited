@@ -1,5 +1,5 @@
 %% GetCited — MASTER FLOW
-%% current as of MCP wiring (all 6 phases built). MCP connector detail: see 01-mcp-auth-flow.mmd
+%% current as of Tracker build (plan approval → tracker_items → track_progress). MCP detail: 01-mcp-auth-flow.mmd
 flowchart TD
   U["User (signed in)<br/>[DATA · Supabase auth.users]<br/>in: email/Google login<br/>out: user_id"]:::data
   MCPC["MCP connector (Claude etc.)<br/>[FUNCTION · api/mcp, OAuth+PKCE, JWT sub=user_id]<br/>see diagram 01"]:::fn
@@ -14,12 +14,16 @@ flowchart TD
 
   CARDS{"Agent Mode card chosen?<br/>[FUNCTION decides route]"}:::dec
   CONTENT["generate_content<br/>[AGENT · Claude Sonnet]<br/>in: type (blog/vs-page/reddit/li/pitch/review/yt) + topic + config + plan<br/>out: publish-ready markdown draft"]:::agent
-  ROADMAP["generateRoadmap<br/>[AGENT · Claude Sonnet]<br/>in: chosen tactics + gaps + capacity<br/>out: week-by-week actions/owner/hours/deliverable/KPI"]:::agent
+  ROADMAP["generateRoadmap<br/>[AGENT · Claude Sonnet]<br/>in: chosen tactics + gaps + capacity<br/>out: weeks (WHAT/WHY/HOW/WHO/hours/deliverable/KPI) + execution guidelines"]:::agent
 
   BENCH["Card 1 Benchmark<br/>[FUNCTION → pipeline]<br/>in: config<br/>out: SoV + citations + sentiment"]:::fn
   DIAG["Card 2 Diagnose<br/>[FUNCTION → crawl]<br/>in: competitor citations<br/>out: gap analysis (why they win)"]:::fn
   PLAN["Card 3 Plan<br/>[FUNCTION → plan.ts]<br/>in: gaps + budget + team<br/>out: costed tactics + projection"]:::fn
-  TRACK["Card 4 Track<br/>[FUNCTION → crawl verify]<br/>in: prior plan + what's done<br/>out: before→after + pending"]:::fn
+  TRACK["Card 4 Track<br/>[FUNCTION → tracker_items PRIMARY]<br/>in: tracker status + remarks (+ optional re-benchmark)<br/>out: progress %, overdue, blocked, measured impact"]:::fn
+
+  APPROVE{"Approve plan into Tracker?<br/>[ASK · agent asks after build_plan;<br/>approve_plan only on explicit yes]"}:::ask
+  TRACKDB["tracker_items<br/>[DATA · Supabase, RLS owner-only, migration 0006]<br/>in: one row per roadmap action (due = plan created + week×7d)<br/>out: status (not_started/in_progress/done/blocked) + remarks"]:::data
+  TRACKPG["/tracker page<br/>[FUNCTION · editable table]<br/>in: tracker_items of latest approved plan<br/>out: status dropdown + inline remarks via server action"]:::fn
 
   PANEL["Panel run<br/>[AGENT · Claude/Perplexity/Gemini/Groq]<br/>in: prompts, per-user keys<br/>out: raw AI answers (real-if-key-else-mock)"]:::agent
   PARSE["Parse answers<br/>[AGENT · Claude Haiku]<br/>in: raw answer + candidate brands<br/>out: mentions, cited_domains, sentiment"]:::agent
@@ -35,7 +39,7 @@ flowchart TD
   ALLOC["allocatePlan (greedy knapsack)<br/>[FUNCTION · budget + teamSize*weeks*25h]<br/>in: gaps + tactic library<br/>out: chosen tactics (lift per cost+effort, gap-first)"]:::fn
   PROJ["projectImpact<br/>[FUNCTION]<br/>in: selected tactics (+GSC/Perplexity/Ahrefs if present)<br/>out: target share, traffic, conversions, assumptions, confidence"]:::fn
   CONF{"Grounded by real data?<br/>[FUNCTION]"}:::dec
-  REPORT["generate_report<br/>[LIBRARY · @react-pdf / exceljs / HTML]<br/>in: plan + projection<br/>out: downloadable artifact + Storage URL"]:::data
+  REPORT["generate_report<br/>[LIBRARY · docx / @react-pdf / exceljs / HTML]<br/>in: plan + projection + roadmap (dates from plan creation)<br/>out: downloadable artifact (Word = full WHAT/WHY/HOW/WHO)"]:::data
 
   U --> CFG
   U --> THREADS
@@ -63,7 +67,13 @@ flowchart TD
   GAP --> ALLOC --> PROJ --> CONF
   CONF -->|"GSC/Perplexity/Ahrefs present"| REPORT
   CONF -->|"no grounding → confidence medium/low"| REPORT
-  TRACK --> CRAWL
+
+  PROJ --> APPROVE
+  APPROVE -->|"yes → approve_plan (chat + MCP parity)"| TRACKDB
+  TRACKDB --> TRACKPG
+  U --> TRACKPG
+  TRACK --> TRACKDB
+  TRACK -. "re_benchmark: true (paid — ask first)" .-> PANEL
 
   classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
   classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;

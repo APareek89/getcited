@@ -2,7 +2,15 @@ import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { z } from "zod";
 import { verifyMcpToken, publicOrigin } from "@/lib/mcp/auth";
-import { mcpActiveConfig, mcpSavePlan, mcpLatestPlan, McpGeoStore, persistCitations } from "@/lib/mcp/data";
+import {
+  mcpActiveConfig,
+  mcpSavePlan,
+  mcpLatestPlan,
+  mcpApprovePlan,
+  mcpTrackerItems,
+  McpGeoStore,
+  persistCitations,
+} from "@/lib/mcp/data";
 import {
   InProcessPanelRunner,
   buildReport,
@@ -236,6 +244,45 @@ const handler = createMcpHandler(
         const plan = await mcpLatestPlan(userId);
         if (!plan) return text({ error: "No plan yet — run build_plan first." });
         return text(plan);
+      },
+    );
+
+    server.tool(
+      "approve_plan",
+      "Approve a plan into the user's Tracker: one editable execution item per roadmap action, due dates derived from the plan creation date (week N due N×7 days later). Idempotent. Defaults to the latest plan. Only call when the user has explicitly approved.",
+      { plan_id: z.string().optional() },
+      async (args, extra) => {
+        const userId = userIdOf(extra.authInfo);
+        if (!userId) return text({ error: "No user context — install the connector via OAuth." });
+        return text(await mcpApprovePlan(userId, args.plan_id));
+      },
+    );
+
+    server.tool(
+      "get_tracker",
+      "Read the Tracker execution items (status + remarks the user maintains) for the latest approved plan, or a specific plan_id. This is the PRIMARY source for progress questions.",
+      { plan_id: z.string().optional() },
+      async (args, extra) => {
+        const userId = userIdOf(extra.authInfo);
+        if (!userId) return text({ error: "No user context — install the connector via OAuth." });
+        const tracker = await mcpTrackerItems(userId, args.plan_id);
+        if (!tracker)
+          return text({
+            approved: false,
+            message: "No plan has been approved into the Tracker yet — run approve_plan (with user consent).",
+          });
+        const counts = { not_started: 0, in_progress: 0, done: 0, blocked: 0 };
+        for (const i of tracker.items) {
+          if (i.status in counts) counts[i.status as keyof typeof counts] += 1;
+        }
+        return text({
+          approved: true,
+          plan_id: tracker.plan_id,
+          total_items: tracker.items.length,
+          status_counts: counts,
+          done_pct: Math.round((counts.done / Math.max(1, tracker.items.length)) * 100),
+          items: tracker.items,
+        });
       },
     );
 

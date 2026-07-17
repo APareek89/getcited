@@ -28,51 +28,39 @@ out of the assistant tabs)** · Dashboard. Assistant no longer has an Agent/MCP 
 `/mcp` added to PROTECTED_PREFIXES. Also fixed missing `--color-danger` mapping (text-danger classes
 were silently no-oping).
 
-## UI fix round 2 + Tracker (user feedback 2026-07-17 from live screenshots) — items 1–5 DONE (awaiting user live check), 6 in progress
-1. **Configure layout** (`src/app/(app)/configure/page.tsx` + `components/configure/*`): too much dead
-   space. Split into TWO columns — left "Business" (brand/competitors/queries/budget), right "Platform"
-   (We Serve/Self Serve + BYOK). Compact the cards; page must fit the viewport with NO scrolling unless
-   the user adds extra competitors/queries (start with 3 visible rows + Add).
-2. **Top nav alignment** (`components/app-shell.tsx`): tabs go LEFT, next to the GetCited logo (remove
-   justify-center).
-3. **Dashboard nav bug** (screenshot: KPI numbers bleed through the header): sticky `.glass` header is
-   too transparent + stacking-context issue. Fix: header background rgba(7,11,20,~0.85) + blur, z-50,
-   verify content scrolls UNDER it on /dashboard.
-4. **GEO Agent chat width** (`components/assistant/assistant-view.tsx`): messages container max-w-2xl
-   is too narrow — widen the CONTENT area (e.g. max-w-4xl/5xl) but KEEP the composer + starter-cards
-   block at its current width.
-5. **Detailed plan doc**: chat shows a SUMMARY only (collapse PlanResult); the full plan becomes a
-   downloadable **DOCX** (new: `docx` npm pkg; extend `/api/report/plan/[planId]` with format=docx) +
-   existing PDF/Excel. Plan content must be practical & detailed per tactic: WHAT (action), WHY
-   (gap/evidence), HOW (step-by-step guidelines), WHO (owner role), TIMELINE (week-by-week with dates
-   from plan creation), plus general execution guidelines. Extend roadmap.ts generation accordingly.
-6. **New "Tracker" tab** (nav: Configure · GEO Agent · GEO MCP · Tracker · Dashboard):
-   - Approval flow: after build_plan the agent ASKS "approve this plan into your Tracker?" →
-     new `approve_plan` tool writes tracker rows (also MCP parity per standing rule).
-   - New table `tracker_items` (migration 0006, RLS owner-only): id, user_id, plan_id, week,
-     due_date (derived from plan creation + week), action, owner_role, hours, deliverable,
-     status (not_started|in_progress|done|blocked — dropdown), remarks (user-editable), updated_at.
-   - /tracker page: editable table (status dropdown + remarks inline edit, save via server action).
-   - `track_progress` tool now reads tracker_items (status+remarks) as the PRIMARY source for
-     "how am I progressing", plus optional re-benchmark for measured impact.
+## UI fix round 2 + Tracker (2026-07-17) — ALL SHIPPED, awaiting user live validation
+✅ Shipped: nav tabs left of logo · opaque `.glass-header` (rgba(7,11,20,.85)+blur, z-50) · Configure
+two-column compact (Business 3fr / Platform 2fr, 3 competitor rows + Add) · chat messages max-w-4xl
+(composer/cards stay 2xl) · detailed plan (roadmap.ts now emits WHAT/WHY/HOW/WHO + execution
+guidelines as `{weeks, guidelines}`; `lib/geo/schedule.ts` pure date/normalize/tracker-row helpers,
+14 tests) · DOCX export (`docx` pkg, `lib/report/plan-docx.ts`, `?format=docx`; PDF/Excel/HTML gained
+dates/why/how/guidelines) · PlanResult collapsed to summary + Word/PDF/Excel/HTML downloads ·
+**Tracker**: migration 0006 `tracker_items` (RLS owner-only, APPLIED to live DB, db-check green),
+`approve_plan` chat tool (agent asks after build_plan, only on explicit yes; idempotent),
+/tracker editable page (status dropdown + inline remarks via server action), `track_progress`
+reads tracker_items PRIMARY (re_benchmark:true optional+paid), MCP parity (`approve_plan` +
+`get_tracker` in /api/[transport]). Nav: Configure · GEO Agent · GEO MCP · Tracker · Dashboard.
 
 ## Next session — pending points (2026-07-17)
-0. **User validates the Aurora Glass re-theme + top nav live** (sign in; check Configure/GEO Agent/
-   GEO MCP/Dashboard render well as glass; report any contrast/spacing misses — mockup refs in docs/design-refs/).
-1. **User validates v1.1 live**: re-save Configure (old competitors are URLs → hit "Suggest competitors",
-   set real budget/team), run "How can I improve?" card, check roadmap + PDF, try generate_content + upload.
-2. **Loop offer is OPEN** (Loop.MD status: offered) — ask once: turn the eval loop on?
-3. User may add keys: `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` (tracing) + `FIRECRAWL_API_KEY` (richer crawls).
-4. Candidate next features (PM backlog): content calendar view from roadmap, weekly digest email,
+0. **User validates live** (all auth-gated): round-2 UI fixes (nav-left, header bleed on /dashboard,
+   Configure 2-col no-scroll, chat width) + full Tracker flow: build plan → agent asks approval →
+   /tracker table edits → "How am I progressing?" → DOCX download.
+1. **Loop offer is OPEN** (Loop.MD status: offered) — ask once: turn the eval loop on?
+2. User may add keys: `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` (tracing) + `FIRECRAWL_API_KEY` (richer crawls).
+3. Candidate next features (PM backlog): content calendar view from roadmap, weekly digest email,
    competitor-watch alerts, Vercel deploy (needed for installing the MCP connector in claude.ai).
+4. FMEA smart-suggest fired this session (migration + auth/RLS + new tools + 200+ line diffs) —
+   scan offered, user hasn't answered yet.
 
 ## Decisions
+- 2026-07-17 — plans.roadmap is now `{weeks, guidelines}` (legacy rows = week array); every reader goes through `normalizeRoadmap`.
+- 2026-07-17 — track_progress does NOT re-benchmark by default (paid); `re_benchmark: true` only with user consent. approve_plan is idempotent (existing items = user's source of truth).
 - 2026-07-16 — Supabase project = the formerly-shared one, repointed to GetCited (other tenant was dead staging).
 - 2026-07-16 — MCP auth = self-hosted OAuth ported from geo-radar (no external IdP); authorize gated by app session.
 - 2026-07-16 — FMEA policy = act on P0 only (user preference). Competitors stored as names + parallel domains.
 - 2026-07-16 — GitHub: private repo on the user's active gh account; repo must stay PRIVATE.
 
-**Session efficiency:** 🎯 ~75% feature (6 phases + v1.1) · 🔧 ~15% support (shared-Supabase auth untangle, pnpm/corp-TLS) · 🔁 ~10% rework (competitors-as-URLs fix, Recharts bar swap)
+**Session efficiency (2026-07-17):** 🎯 ~85% feature (UI round 2, detailed plan/DOCX, Tracker end-to-end) · 🔧 ~10% support (preview auth gate, tsx/CA-bundle quirks) · 🔁 ~5% rework (docx numbering restart, drizzle jsonb typing)
 
 ## Session continuity (Power Coding)
 - **Resume a fresh session:** type `Refer to Handoff.MD in /Users/anandpareek/Documents/Projects/GetCited and begin`.

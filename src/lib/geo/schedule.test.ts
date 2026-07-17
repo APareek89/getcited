@@ -5,6 +5,7 @@ import {
   weekDueDate,
   isoDate,
   fmtWeekRange,
+  trackerRowsFromRoadmap,
 } from "./schedule";
 
 const CREATED = "2026-07-17T09:30:00.000Z";
@@ -59,5 +60,63 @@ describe("normalizeRoadmap (legacy array vs current {weeks, guidelines})", () =>
     expect(normalizeRoadmap(null)).toEqual({ weeks: [], guidelines: [] });
     expect(normalizeRoadmap("nope")).toEqual({ weeks: [], guidelines: [] });
     expect(normalizeRoadmap({ foo: 1 })).toEqual({ weeks: [], guidelines: [] });
+  });
+});
+
+describe("trackerRowsFromRoadmap (approve_plan row derivation)", () => {
+  const roadmap = {
+    weeks: [
+      {
+        week: 1,
+        theme: "kickoff",
+        kpi_checkpoint: "k1",
+        actions: [
+          { tactic_id: "t1", action: "Write comparison page", owner_role: "Writer", hours: 8, deliverable: "Draft" },
+          { tactic_id: "t2", action: "Pitch 3 roundups", owner_role: "Marketer", hours: 4, deliverable: "3 emails" },
+        ],
+      },
+      {
+        week: 3,
+        theme: "outreach",
+        kpi_checkpoint: "k3",
+        actions: [{ tactic_id: "t2", action: "Follow up", owner_role: "Marketer", hours: 2, deliverable: "Replies" }],
+      },
+    ],
+    guidelines: ["g"],
+  };
+
+  it("flattens actions with due dates from plan creation + week offsets", () => {
+    const rows = trackerRowsFromRoadmap(CREATED, roadmap);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toEqual({
+      week: 1,
+      due_date: "2026-07-24",
+      action: "Write comparison page",
+      owner_role: "Writer",
+      hours: 8,
+      deliverable: "Draft",
+    });
+    expect(rows[2]!.week).toBe(3);
+    expect(rows[2]!.due_date).toBe("2026-08-07"); // creation + 21 days
+  });
+
+  it("handles legacy array-shaped roadmaps and empty/garbage input", () => {
+    const rows = trackerRowsFromRoadmap(CREATED, roadmap.weeks);
+    expect(rows).toHaveLength(3);
+    expect(trackerRowsFromRoadmap(CREATED, null)).toEqual([]);
+  });
+
+  it("nulls missing owner/hours/deliverable instead of crashing", () => {
+    const rows = trackerRowsFromRoadmap(CREATED, {
+      weeks: [{ week: 2, theme: "x", kpi_checkpoint: "k", actions: [{ tactic_id: "t", action: "Do it" }] }],
+    });
+    expect(rows[0]).toEqual({
+      week: 2,
+      due_date: "2026-07-31",
+      action: "Do it",
+      owner_role: null,
+      hours: null,
+      deliverable: null,
+    });
   });
 });

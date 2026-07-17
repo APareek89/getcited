@@ -265,6 +265,30 @@ export const memories = pgTable(
   (t) => [index("memories_user_kind_idx").on(t.userId, t.kind)],
 );
 
+// Tracker: an approved plan's roadmap actions as editable execution items.
+// Populated by the approve_plan tool (due_date = plan creation + week offset);
+// the user updates status/remarks on /tracker; track_progress reads it as the
+// PRIMARY progress source.
+export const trackerItems = pgTable(
+  "tracker_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    planId: uuid("plan_id").notNull(),
+    week: integer("week").notNull(),
+    dueDate: date("due_date").notNull(),
+    action: text("action").notNull(),
+    ownerRole: text("owner_role"),
+    hours: real("hours"),
+    deliverable: text("deliverable"),
+    // not_started | in_progress | done | blocked
+    status: text("status").notNull().default("not_started"),
+    remarks: text("remarks"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("tracker_items_user_plan_idx").on(t.userId, t.planId, t.week)],
+);
+
 // ── MCP OAuth (self-hosted authorization server; ported from geo-radar-mcp) ──
 // Pre-auth tables: RLS is enabled with NO policies (deny-all for anon/authed);
 // only the server-side Drizzle service client touches them. DB-backed (not
@@ -299,3 +323,4 @@ export type CitationRow = typeof citations.$inferSelect;
 export type PlanRow = typeof plans.$inferSelect;
 export type ProgressSnapshotRow = typeof progressSnapshots.$inferSelect;
 export type ReportRow = typeof reports.$inferSelect;
+export type TrackerItemRow = typeof trackerItems.$inferSelect;

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, SlidersHorizontal, Bot, Plug, LayoutDashboard, LogOut } from "lucide-react";
+import { Sparkles, SlidersHorizontal, Bot, Plug, ListChecks, LayoutDashboard, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/configure", label: "Configure", icon: SlidersHorizontal },
   { href: "/assistant", label: "GEO Agent", icon: Bot },
   { href: "/mcp", label: "GEO MCP", icon: Plug },
+  { href: "/tracker", label: "Tracker", icon: ListChecks },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 

@@ -20,7 +20,8 @@ const TOOL_LABELS: Record<string, string> = {
   run_benchmark: "Running AI panel benchmark",
   diagnose_citations: "Diagnosing citation gaps",
   build_plan: "Building your action plan + roadmap",
-  track_progress: "Tracking plan progress",
+  approve_plan: "Adding the plan to your Tracker",
+  track_progress: "Reading your Tracker progress",
   generate_content: "Writing your content",
   save_memory: "Saving to memory",
 };

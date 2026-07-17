@@ -277,28 +277,56 @@ function DownloadChip({
 }
 
 // ── Track ────────────────────────────────────────────────────────────────────
+const ITEM_STATUS_DOT: Record<string, string> = {
+  not_started: "bg-muted-foreground/40",
+  in_progress: "bg-primary",
+  done: "bg-positive",
+  blocked: "bg-danger",
+};
+
+interface TrackerItem {
+  week: number;
+  action: string;
+  status: string;
+  due_date: string;
+  owner_role: string | null;
+  remarks: string | null;
+}
+
 export interface TrackOutput {
   baseline_citation_share: number | null;
   target_citation_share: number | null;
-  current_citation_share: number;
-  pending: string[];
-  tactics: { id: string; name: string; done: boolean }[];
+  measured?: { current_citation_share: number } | null;
+  // Tracker-based shape:
+  approved?: boolean;
+  message?: string;
+  total_items?: number;
+  status_counts?: { not_started: number; in_progress: number; done: number; blocked: number };
+  done_pct?: number;
+  overdue?: { week: number; action: string; due_date: string; status: string }[];
+  items?: TrackerItem[];
+  // Legacy shape (old threads):
+  current_citation_share?: number;
+  pending?: string[];
+  tactics?: { id: string; name: string; done: boolean }[];
 }
 
 export function TrackResult({ data }: { data: TrackOutput }) {
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <Stat label="Baseline" value={pct(data.baseline_citation_share)} />
-        <Stat label="Now" value={pct(data.current_citation_share)} highlight />
-        <Stat label="Target" value={pct(data.target_citation_share)} />
-      </div>
-      <div>
-        <div className="mb-1.5 text-xs text-muted-foreground">
-          {data.pending.length} tactic{data.pending.length === 1 ? "" : "s"} pending
+  const [showItems, setShowItems] = useState(false);
+  const measuredNow = data.measured?.current_citation_share ?? data.current_citation_share;
+  const isTracker = data.status_counts != null || data.approved != null;
+
+  if (!isTracker) {
+    // Legacy render for threads recorded before the Tracker existed.
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <Stat label="Baseline" value={pct(data.baseline_citation_share)} />
+          <Stat label="Now" value={pct(measuredNow)} highlight />
+          <Stat label="Target" value={pct(data.target_citation_share)} />
         </div>
         <div className="space-y-1">
-          {data.tactics.map((t) => (
+          {(data.tactics ?? []).map((t) => (
             <div key={t.id} className="flex items-center gap-2 text-sm">
               <span className={cn("h-2 w-2 rounded-full", t.done ? "bg-positive" : "bg-muted-foreground/40")} />
               <span className={t.done ? "text-muted-foreground line-through" : ""}>{t.name}</span>
@@ -306,6 +334,91 @@ export function TrackResult({ data }: { data: TrackOutput }) {
           ))}
         </div>
       </div>
+    );
+  }
+
+  if (!data.approved) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">{data.message}</p>
+        {measuredNow != null && (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <Stat label="Baseline" value={pct(data.baseline_citation_share)} />
+            <Stat label="Now (measured)" value={pct(measuredNow)} highlight />
+            <Stat label="Target" value={pct(data.target_citation_share)} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const c = data.status_counts!;
+  const total = data.total_items ?? 0;
+  return (
+    <div className="space-y-3">
+      {/* Progress headline from the Tracker */}
+      <div className="rounded-xl border border-border bg-secondary/40 p-3">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">Execution progress</span>
+          <span className="text-xs text-muted-foreground">
+            {c.done}/{total} done · {data.done_pct}%
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background/60">
+          <div className="h-full bg-aurora" style={{ width: `${data.done_pct ?? 0}%` }} />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <span>⏳ {c.not_started} not started</span>
+          <span className="text-primary">▶ {c.in_progress} in progress</span>
+          <span className="text-positive">✓ {c.done} done</span>
+          {c.blocked > 0 && <span className="text-danger">■ {c.blocked} blocked</span>}
+        </div>
+      </div>
+
+      {(data.overdue?.length ?? 0) > 0 && (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-xs text-warning">
+          {data.overdue!.length} item{data.overdue!.length === 1 ? "" : "s"} overdue — oldest:{" "}
+          {data.overdue![0]!.action} (due {data.overdue![0]!.due_date})
+        </div>
+      )}
+
+      {/* Measured impact only when a re-benchmark ran */}
+      {measuredNow != null && (
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <Stat label="Baseline" value={pct(data.baseline_citation_share)} />
+          <Stat label="Now (measured)" value={pct(measuredNow)} highlight />
+          <Stat label="Target" value={pct(data.target_citation_share)} />
+        </div>
+      )}
+
+      {(data.items?.length ?? 0) > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowItems((s) => !s)}
+            className="flex items-center gap-1 text-xs font-medium text-foreground"
+          >
+            Items ({data.items!.length}) — edit them on the Tracker tab
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showItems && "rotate-180")} />
+          </button>
+          {showItems && (
+            <div className="mt-2 space-y-1">
+              {data.items!.map((i, idx) => (
+                <div key={idx} className="flex items-start gap-2 text-xs">
+                  <span className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", ITEM_STATUS_DOT[i.status] ?? "bg-muted-foreground/40")} />
+                  <span className="min-w-0 flex-1">
+                    <span className={i.status === "done" ? "text-muted-foreground line-through" : ""}>
+                      wk{i.week} · {i.action}
+                    </span>
+                    {i.remarks && <span className="text-muted-foreground"> — “{i.remarks}”</span>}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground/70">{i.due_date}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,8 @@ import type { User } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/auth";
 import { getActiveConfig, type ConfigView } from "@/lib/db/configs";
 import { SupabaseGeoStore } from "@/lib/db/geo-store";
-import { savePlan, getLatestPlan } from "@/lib/db/plans";
+import { savePlan, getLatestPlan, getPlanById } from "@/lib/db/plans";
+import { approvePlanToTracker, latestTrackedPlanItems } from "@/lib/db/tracker";
 import { saveThreadMessages } from "@/lib/db/threads";
 import { listMemories, saveMemory, memoryPromptBlock } from "@/lib/db/memories";
 import { persistCitations } from "@/lib/mcp/data";
@@ -315,33 +316,97 @@ export async function POST(req: Request) {
         },
       }),
 
-      track_progress: tool({
+      approve_plan: tool({
         description:
-          "Card 4 (Track). Pull the latest plan, re-benchmark, and report before→after + pending tactics.",
-        inputSchema: z.object({
-          done_tactic_ids: z.array(z.string()).optional(),
-        }),
-        async execute({ done_tactic_ids }) {
-          const plan = await getLatestPlan();
-          if (!plan) return { error: "No plan yet. Build a plan first (How can I improve?)." };
-          const cfg = await getActiveConfig();
-          const r = await runBenchmark(user, cfg, keys);
-          if ("error" in r) return { error: r.error };
-          const analysis: AnalysisAnswer[] = r.report.answers.map((a) => ({
-            prompt: a.prompt,
-            rawAnswer: "",
-            citedDomains: a.cited_domains,
-            sentiment: a.sentiment,
-          }));
-          const citations = computeCitations(r.brand, analysis, r.ownedDomains);
-          const done = new Set(done_tactic_ids ?? []);
+          "Approve a plan into the user's Tracker: creates one editable execution item per roadmap action, with due dates derived from the plan's creation date (week N due N×7 days later). Call ONLY after the user explicitly says yes. Defaults to the latest plan.",
+        inputSchema: z.object({ plan_id: z.string().optional() }),
+        async execute({ plan_id }) {
+          const plan = plan_id ? await getPlanById(plan_id) : await getLatestPlan();
+          if (!plan) return { error: "No plan found. Build a plan first (How can I improve?)." };
+          const res = await approvePlanToTracker(user.id, plan);
+          if (res.alreadyApproved)
+            return {
+              plan_id: plan.id,
+              already_approved: true,
+              message: "This plan is already in the Tracker — the Tracker tab has the items.",
+            };
+          if (res.created === 0)
+            return { error: "This plan has no roadmap actions to track. Rebuild the plan (build_plan) first." };
           return {
             plan_id: plan.id,
-            baseline_citation_share: plan.projection?.currentCitationShare ?? null,
-            target_citation_share: plan.targetCitationShare,
-            current_citation_share: citations.your_citation_share,
-            tactics: plan.tactics.map((t) => ({ id: t.id, name: t.name, done: done.has(t.id) })),
-            pending: plan.tactics.filter((t) => !done.has(t.id)).map((t) => t.name),
+            created_items: res.created,
+            message: `Approved — ${res.created} execution items are now on the Tracker tab with real due dates. The user updates status and remarks there.`,
+          };
+        },
+      }),
+
+      track_progress: tool({
+        description:
+          "Card 4 (Track). PRIMARY source = the user's Tracker items (status + remarks they maintain on the Tracker tab). Set re_benchmark: true ONLY when the user wants measured citation-share impact — it re-runs the AI panel and costs money, so ask first.",
+        inputSchema: z.object({
+          re_benchmark: z
+            .boolean()
+            .optional()
+            .describe("Re-run the AI panel for measured impact (paid). Default false."),
+        }),
+        async execute({ re_benchmark }) {
+          const tracked = await latestTrackedPlanItems();
+          const plan = tracked ? await getPlanById(tracked.planId) : await getLatestPlan();
+
+          let measured: { current_citation_share: number } | null = null;
+          if (re_benchmark) {
+            const cfg = await getActiveConfig();
+            const r = await runBenchmark(user, cfg, keys);
+            if ("error" in r) return { error: r.error };
+            const analysis: AnalysisAnswer[] = r.report.answers.map((a) => ({
+              prompt: a.prompt,
+              rawAnswer: "",
+              citedDomains: a.cited_domains,
+              sentiment: a.sentiment,
+            }));
+            measured = {
+              current_citation_share: computeCitations(r.brand, analysis, r.ownedDomains)
+                .your_citation_share,
+            };
+          }
+
+          if (!tracked) {
+            return {
+              approved: false,
+              plan_id: plan?.id ?? null,
+              message: plan
+                ? "The latest plan hasn't been approved into the Tracker yet — offer to approve it (approve_plan) so progress can be tracked item by item."
+                : "No plan yet. Build a plan first (How can I improve?).",
+              baseline_citation_share: plan?.projection?.currentCitationShare ?? null,
+              target_citation_share: plan?.targetCitationShare ?? null,
+              measured,
+            };
+          }
+
+          const today = isoDate(new Date());
+          const counts = { not_started: 0, in_progress: 0, done: 0, blocked: 0 };
+          for (const i of tracked.items) counts[i.status] += 1;
+          const overdue = tracked.items.filter((i) => i.status !== "done" && i.dueDate < today);
+          return {
+            approved: true,
+            plan_id: tracked.planId,
+            total_items: tracked.items.length,
+            status_counts: counts,
+            done_pct: Math.round((counts.done / Math.max(1, tracked.items.length)) * 100),
+            overdue: overdue
+              .slice(0, 10)
+              .map((i) => ({ week: i.week, action: i.action, due_date: i.dueDate, status: i.status })),
+            items: tracked.items.map((i) => ({
+              week: i.week,
+              action: i.action,
+              status: i.status,
+              due_date: i.dueDate,
+              owner_role: i.ownerRole,
+              remarks: i.remarks,
+            })),
+            baseline_citation_share: plan?.projection?.currentCitationShare ?? null,
+            target_citation_share: plan?.targetCitationShare ?? null,
+            measured,
           };
         },
       }),

@@ -70,6 +70,37 @@ export function fmtDate(d: Date): string {
   });
 }
 
+/** One roadmap action flattened into an executable tracker row. */
+export interface TrackerRowInput {
+  week: number;
+  due_date: string; // ISO yyyy-mm-dd — plan creation + week*7 days
+  action: string;
+  owner_role: string | null;
+  hours: number | null;
+  deliverable: string | null;
+}
+
+/**
+ * Flatten a plan's roadmap into tracker rows. Due dates derive from the plan's
+ * creation date + week offsets (week N due N*7 days after creation).
+ */
+export function trackerRowsFromRoadmap(
+  planCreatedAt: string | Date,
+  roadmap: unknown,
+): TrackerRowInput[] {
+  const { weeks } = normalizeRoadmap(roadmap);
+  return weeks.flatMap((w) =>
+    (w.actions ?? []).map((a) => ({
+      week: w.week,
+      due_date: isoDate(weekDueDate(planCreatedAt, w.week)),
+      action: a.action,
+      owner_role: a.owner_role ?? null,
+      hours: typeof a.hours === "number" ? a.hours : null,
+      deliverable: a.deliverable ?? null,
+    })),
+  );
+}
+
 /** "Mar 3 – Mar 10, 2026" range for week N of a plan. */
 export function fmtWeekRange(planCreatedAt: string | Date, week: number): string {
   const start = weekStartDate(planCreatedAt, week).toLocaleDateString("en-US", {
