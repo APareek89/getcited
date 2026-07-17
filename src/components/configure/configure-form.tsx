@@ -570,55 +570,101 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       {/* B · Rail + panels — the left rail is primary navigation between the
           Business Context and Platform surfaces, inside the viewport frame. */}
       <div className="flex flex-1 flex-col gap-3 lg:min-h-0 lg:flex-row lg:gap-4">
-        {/* B0 · Navigation rail — vertical at lg+, horizontal row below. */}
-        <nav aria-label="Configuration sections" className="flex shrink-0 gap-2 lg:w-[188px] lg:flex-col">
-          {(
-            [
-              {
-                id: "business" as const,
-                label: "Business Context",
-                caption: "Brand · competitors · queries",
-                icon: Briefcase,
-              },
-              {
-                id: "platform" as const,
-                label: "Platform",
-                caption: mode === "self_serve" ? "Self Serve · your keys" : "We Serve · our keys",
-                icon: ServerCog,
-              },
-            ]
-          ).map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                aria-current={active ? "true" : undefined}
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  "flex flex-1 items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition lg:flex-none",
-                  active
-                    ? "border-transparent bg-aurora text-white shadow-[0_0_18px_rgba(124,58,237,0.35)]"
-                    : "border-white/[0.1] bg-white/[0.04] text-muted-foreground hover:border-white/[0.18] hover:bg-white/[0.06] hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{t.label}</span>
+        {/* B0 · Navigation rail — a real panel: tab switcher on top, live setup
+            progress filling the rest so the whole left column reads as one
+            aligned block instead of two floating buttons. */}
+        <aside
+          aria-label="Configuration sections"
+          className="flex shrink-0 flex-col gap-3 lg:w-[212px]"
+        >
+          <div className={cn(TIER1, "flex flex-col gap-1 p-2")}>
+            {(
+              [
+                {
+                  id: "business" as const,
+                  label: "Business Context",
+                  caption: "Brand · competitors · queries",
+                  icon: Briefcase,
+                },
+                {
+                  id: "platform" as const,
+                  label: "Platform",
+                  caption: mode === "self_serve" ? "Self Serve · your keys" : "We Serve · our keys",
+                  icon: ServerCog,
+                },
+              ]
+            ).map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-current={active ? "true" : undefined}
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition",
+                    active
+                      ? "border-transparent bg-aurora text-white shadow-[0_0_18px_rgba(124,58,237,0.35)]"
+                      : "border-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{t.label}</span>
+                    <span
+                      className={cn(
+                        "block truncate text-[10px]",
+                        active ? "text-white/75" : "text-muted-foreground/70",
+                      )}
+                    >
+                      {t.caption}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Setup progress — fills the rail (lg+) so it reads as one panel and
+              doubles as a live checklist mirroring the header's step dots. */}
+          <div className={cn(TIER1, "hidden flex-1 flex-col p-4 lg:flex")}>
+            <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              Setup · {doneCount} of 3
+            </div>
+            <ol className="space-y-3">
+              {[
+                { label: "Brand & plan", hint: "URL + budget/team/weeks", done: steps[0] },
+                { label: "Competitors", hint: `${filledCompetitors} added`, done: steps[1] },
+                { label: "Buyer queries", hint: `${queries.length} of 30`, done: steps[2] },
+              ].map((s, i) => (
+                <li key={i} className="flex items-start gap-2.5">
                   <span
                     className={cn(
-                      "block truncate text-[10px]",
-                      active ? "text-white/75" : "text-muted-foreground/70",
+                      "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-medium",
+                      s.done
+                        ? "border-transparent bg-positive/20 text-positive"
+                        : "border-white/20 text-muted-foreground/60",
                     )}
                   >
-                    {t.caption}
+                    {s.done ? <Check className="h-2.5 w-2.5" /> : i + 1}
                   </span>
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+                  <span className="min-w-0">
+                    <span
+                      className={cn("block text-sm", s.done ? "text-foreground" : "text-muted-foreground")}
+                    >
+                      {s.label}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground/70">{s.hint}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-auto flex items-center gap-1.5 pt-4 text-[11px] text-muted-foreground/70">
+              <Save className="h-3 w-3" /> ⌘/Ctrl+S to save
+            </p>
+          </div>
+        </aside>
 
       {/* B1–B3 · Business Context panel — three Tier-1 columns, reading order =
           step order. Kept mounted (hidden via display) so field refs, focus
