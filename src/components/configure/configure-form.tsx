@@ -1,24 +1,32 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Plus,
-  X,
-  Loader2,
-  Wand2,
-  Search,
-  Save,
-  Users,
-  DollarSign,
+  AlertCircle,
   CalendarClock,
+  Check,
+  DollarSign,
+  Globe,
+  Loader2,
+  MessagesSquare,
+  Plus,
+  Save,
+  Sparkles,
+  Swords,
+  Users,
+  Wand2,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
-import { FieldHint } from "@/components/field-hint";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+import { ConfigurePlatform } from "@/components/configure/configure-platform";
 import type { ConfigView } from "@/lib/db/configs";
 import {
   saveConfigAction,
@@ -26,16 +34,22 @@ import {
   discoverCompetitorsAction,
 } from "@/app/(app)/configure/actions";
 
-const HINTS = {
-  brandUrl: "Your website. We derive owned domains from it to detect when AI cites you.",
-  brandName: "How you're referred to in AI answers (defaults to your domain if blank).",
-  description: "One line on what you do — sharpens generated queries and competitors.",
-  competitors: "Up to 5 rivals to compare AI share-of-voice against. Use 'Suggest' to auto-fill.",
-  queries: "Buyer-intent prompts we ask the AI panel. 'Fetch' generates them, grounded in real searches.",
-  budget: "What you can spend on the action plan. Drives which tactics the plan picks.",
-  team: "People available. Sets the person-hours the plan can allocate.",
-  timeline: "Weeks to execute the plan. Person-hours = team × weeks × ~25 productive hrs/wk.",
-} as const;
+/* Client rules mirror the server zod SaveSchema — a client-valid form cannot
+ * fail server parse. */
+const DOMAIN_RE = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i;
+
+/* Glass depth system: Tier-1 section cards · Tier-2 recessed wells · Tier-3 chips. */
+const TIER1 =
+  "rounded-[20px] border border-white/[0.12] bg-white/[0.05] backdrop-blur-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.25)] transition-colors hover:border-white/[0.16]";
+const TIER2 =
+  "rounded-xl border border-white/[0.08] bg-white/[0.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
+const TIER3 = "rounded-full border border-white/10 bg-white/[0.06]";
+const MICRO_LABEL =
+  "mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground";
+const FIELD =
+  "h-9 rounded-xl border-white/10 bg-white/5 placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-primary/50";
+const AI_BTN =
+  "h-9 w-full justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/10 text-xs text-violet-200 transition-colors hover:border-violet-400/50 hover:bg-violet-500/20 disabled:pointer-events-none disabled:opacity-40";
 
 function padTo<T>(arr: T[], n: number, fill: T): T[] {
   const out = [...arr];
@@ -43,59 +57,277 @@ function padTo<T>(arr: T[], n: number, fill: T): T[] {
   return out;
 }
 
+/** Same host derivation the server uses in deriveDomains. */
+function hostOf(url: string): string | null {
+  const u = url.trim();
+  if (!u) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).host
+      .replace(/^www\./, "")
+      .toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function urlProblem(v: string): string | null {
+  const t = v.trim();
+  if (!t) return null; // empty is handled at save time ("required")
+  if (t.length < 3 || t.length > 300 || !DOMAIN_RE.test(t)) {
+    return "Enter a valid domain, e.g. acme.com";
+  }
+  return null;
+}
+
+function numProblem(
+  v: string,
+  min: number,
+  max: number,
+  int: boolean,
+  msg: string,
+): string | null {
+  const t = v.trim();
+  if (!t) return null; // empty falls back to defaults on blur/save — never NaN
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < min || n > max || (int && !Number.isInteger(n))) return msg;
+  return null;
+}
+
+function clampOnBlur(v: string, min: number, max: number, fallback: number): string {
+  const n = Number(v.trim());
+  if (v.trim() === "" || !Number.isFinite(n)) return String(fallback);
+  return String(Math.min(max, Math.max(min, Math.round(n))));
+}
+
+function numOr(v: string, fallback: number): number {
+  const n = Number(v.trim());
+  return v.trim() !== "" && Number.isFinite(n) ? n : fallback;
+}
+
+/** Normalized snapshot for dirty tracking — mode and keys are excluded by design. */
+function snapshotOf(s: {
+  brandUrl: string;
+  brandName: string;
+  description: string;
+  competitors: string[];
+  competitorDomains: string[];
+  queries: string[];
+  budget: string;
+  teamSize: string;
+  timelineWeeks: string;
+}): string {
+  const kept = s.competitors
+    .map((c, i) => ({ name: c.trim(), domain: s.competitorDomains[i] ?? "" }))
+    .filter((c) => c.name);
+  return JSON.stringify({
+    brandUrl: s.brandUrl.trim(),
+    brandName: s.brandName.trim(),
+    description: s.description.trim(),
+    competitors: kept,
+    queries: s.queries,
+    budget: s.budget.trim(),
+    teamSize: s.teamSize.trim(),
+    timelineWeeks: s.timelineWeeks.trim(),
+  });
+}
+
+/** Shared 32px card header: icon chip · mono numeral (positive when done) · hint line. */
+function CardHead({
+  icon: Icon,
+  num,
+  title,
+  hint,
+  done,
+  badge,
+}: {
+  icon: LucideIcon;
+  num: string;
+  title: string;
+  hint: string;
+  done: boolean;
+  badge?: ReactNode;
+}) {
+  return (
+    <div className="flex shrink-0 items-start gap-2.5">
+      <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-gradient-to-br from-[#7C3AED]/25 to-[#22D3EE]/10">
+        <Icon className="h-4 w-4 text-violet-300" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "font-mono text-[10px] tracking-wider",
+              done ? "text-positive" : "text-muted-foreground/60",
+            )}
+          >
+            {num}
+          </span>
+          <span className="text-sm font-semibold">{title}</span>
+          {badge}
+        </div>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+    </div>
+  );
+}
+
+const COMPETITOR_PLACEHOLDERS = ["Competitor name or URL", "e.g. Linear", "e.g. Notion"];
+
 export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [suggesting, setSuggesting] = useState(false);
   const [discovering, setDiscovering] = useState(false);
 
+  // ── B1 · Brand ─────────────────────────────────────────────────────────────
   const [brandUrl, setBrandUrl] = useState(initial?.brandUrl ?? "");
   const [brandName, setBrandName] = useState(initial?.brandName ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [competitors, setCompetitors] = useState<string[]>(
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  // ── B2 · Competitors (NAME inputs + parallel domain pairing) ───────────────
+  // Render ALL saved competitors — the server allows up to 15, so a legacy
+  // config saved with more than 5 must never be truncated (a silent slice here
+  // would drop entries on the next save with no dirty flag). The ADD cap stays
+  // 5 for new configs but expands to the initial length for legacy ones.
+  const cap = Math.max(5, (initial?.competitors ?? []).length);
+  const [competitors, setCompetitors] = useState<string[]>(() =>
     padTo(initial?.competitors ?? [], 3, ""),
   );
-  // Parallel domains (same index as competitors); filled by Suggest, "" otherwise.
-  const [competitorDomains, setCompetitorDomains] = useState<string[]>(
-    padTo(initial?.competitorDomains ?? [], 3, ""),
+  const [competitorDomains, setCompetitorDomains] = useState<string[]>(() =>
+    padTo(
+      initial?.competitorDomains ?? [],
+      Math.max(3, (initial?.competitors ?? []).length),
+      "",
+    ),
   );
-  const [queries, setQueries] = useState<string[]>(initial?.queries ?? []);
+
+  // ── B3 · Queries ───────────────────────────────────────────────────────────
+  const [queries, setQueries] = useState<string[]>((initial?.queries ?? []).slice(0, 30));
   const [newQuery, setNewQuery] = useState("");
+  const [composerMsg, setComposerMsg] = useState<string | null>(null);
+  const [composerFlash, setComposerFlash] = useState(false);
+
+  // ── C · Plan & platform ────────────────────────────────────────────────────
   const [budget, setBudget] = useState<string>(String(initial?.budgetUsd ?? 400));
   const [teamSize, setTeamSize] = useState<string>(String(initial?.teamSize ?? 2));
   const [timelineWeeks, setTimelineWeeks] = useState<string>(
     String(initial?.timelineWeeks ?? 8),
   );
+  // Mode lives here so Save sends the real value, but it persists instantly via
+  // saveModeAction inside ConfigurePlatform and is excluded from dirty state.
+  const [mode, setMode] = useState(initial?.mode ?? "we_serve");
 
+  // ── A · Save / dirty state ─────────────────────────────────────────────────
+  const [savedVersion, setSavedVersion] = useState<number | null>(initial?.version ?? null);
+  const [chipKey, setChipKey] = useState(0);
+  const [shaking, setShaking] = useState(false);
+  const [snapshot, setSnapshot] = useState<string>(() =>
+    snapshotOf({
+      brandUrl: initial?.brandUrl ?? "",
+      brandName: initial?.brandName ?? "",
+      description: initial?.description ?? "",
+      competitors: initial?.competitors ?? [],
+      competitorDomains: initial?.competitorDomains ?? [],
+      queries: (initial?.queries ?? []).slice(0, 30),
+      budget: String(initial?.budgetUsd ?? 400),
+      teamSize: String(initial?.teamSize ?? 2),
+      timelineWeeks: String(initial?.timelineWeeks ?? 8),
+    }),
+  );
+
+  // Entry animations for AI-filled rows / appended queries.
+  const [staggerFrom, setStaggerFrom] = useState<number | null>(null);
+  const [newFrom, setNewFrom] = useState<number | null>(null);
+  const [flashOn, setFlashOn] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  const brandUrlRef = useRef<HTMLInputElement>(null);
+  const brandNameRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const compRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const budgetRef = useRef<HTMLInputElement>(null);
+  const teamRef = useRef<HTMLInputElement>(null);
+  const weeksRef = useRef<HTMLInputElement>(null);
+  const wellRef = useRef<HTMLDivElement>(null);
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const urlValid = brandUrl.trim() !== "" && urlProblem(brandUrl) === null;
+  const host = urlValid ? hostOf(brandUrl) : null;
+  const filledCompetitors = competitors.filter((c) => c.trim()).length;
+  const budgetErr = numProblem(budget, 0, 1_000_000, false, "Between $0 and $1,000,000.");
+  const teamErr = numProblem(teamSize, 1, 100, true, "1–100 people.");
+  const weeksErr = numProblem(timelineWeeks, 1, 104, true, "1–104 weeks.");
+  const teamN = Math.round(numOr(teamSize, 2));
+  const weeksN = Math.round(numOr(timelineWeeks, 8));
+  const hours = Math.max(0, teamN * weeksN * 25);
+  // Step completion: S1 valid URL · S2 ≥1 competitor · S3 ≥3 queries · S4 always.
+  const steps = [urlValid, filledCompetitors >= 1, queries.length >= 3, true];
+  const doneCount = steps.filter(Boolean).length;
+  const canGenerate = Boolean(brandUrl.trim() || brandName.trim());
+  const isDirty =
+    snapshotOf({
+      brandUrl,
+      brandName,
+      description,
+      competitors,
+      competitorDomains,
+      queries,
+      budget,
+      teamSize,
+      timelineWeeks,
+    }) !== snapshot;
+
+  function isDupe(i: number): boolean {
+    const v = competitors[i]?.trim().toLowerCase();
+    if (!v) return false;
+    return competitors.some((c, j) => j < i && c.trim().toLowerCase() === v);
+  }
+
+  // ── Competitors (pairing contract preserved) ───────────────────────────────
   function setCompetitor(i: number, val: string) {
     setCompetitors((prev) => prev.map((c, idx) => (idx === i ? val : c)));
     // Manual edit invalidates the suggested domain pairing for that slot.
     setCompetitorDomains((prev) => prev.map((d, idx) => (idx === i ? "" : d)));
   }
   function addCompetitor() {
-    setCompetitors((prev) => [...prev, ""]);
-    setCompetitorDomains((prev) => [...prev, ""]);
+    setCompetitors((prev) => (prev.length >= cap ? prev : [...prev, ""]));
+    setCompetitorDomains((prev) => (prev.length >= cap ? prev : [...prev, ""]));
   }
   function removeCompetitor(i: number) {
-    setCompetitors((prev) => prev.filter((_, idx) => idx !== i));
-    setCompetitorDomains((prev) => prev.filter((_, idx) => idx !== i));
+    setCompetitors((prev) => padTo(prev.filter((_, idx) => idx !== i), 3, ""));
+    setCompetitorDomains((prev) => padTo(prev.filter((_, idx) => idx !== i), 3, ""));
   }
 
+  // ── Queries ────────────────────────────────────────────────────────────────
+  function flashComposer() {
+    setComposerFlash(true);
+    window.setTimeout(() => setComposerFlash(false), 300);
+  }
   function addQuery() {
     const q = newQuery.trim();
-    if (!q) return;
-    setQueries((prev) => Array.from(new Set([...prev, q])));
+    if (!q) return; // empty-input Enter is a no-op
+    if (queries.length >= 30) {
+      setComposerMsg("30 max — remove one to add another.");
+      flashComposer();
+      return;
+    }
+    if (queries.some((x) => x.toLowerCase() === q.toLowerCase())) {
+      setComposerMsg("Already added");
+      flashComposer();
+      return; // input intentionally NOT cleared so the collision stays visible
+    }
+    setQueries((prev) => [...prev, q]);
     setNewQuery("");
+    setComposerMsg(null);
   }
   function removeQuery(i: number) {
     setQueries((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // ── AI actions ─────────────────────────────────────────────────────────────
   async function onSuggestCompetitors() {
-    if (!brandUrl.trim()) {
-      toast.error("Enter your brand URL first");
-      return;
-    }
+    if (!urlValid || discovering) return;
     setDiscovering(true);
     const res = await discoverCompetitorsAction({
       brandUrl,
@@ -107,32 +339,39 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       toast.error(res.error);
       return;
     }
+    if (res.data.length === 0) {
+      toast("No confident matches — add them manually.");
+      return;
+    }
     // Fill NAMES into the inputs (mention matching needs names, not URLs) and keep
-    // the domain paired in the parallel array for citation attribution.
-    setCompetitors((prev) => {
-      const keepNames = prev.filter((c) => c.trim());
-      const merged = [...keepNames];
-      const mergedDomains = [...competitorDomains.slice(0, keepNames.length)];
-      for (const c of res.data) {
-        if (merged.some((m) => m.toLowerCase() === c.name.toLowerCase())) continue;
-        merged.push(c.name);
-        try {
-          mergedDomains.push(new URL(c.url).host.replace(/^www\./, "").toLowerCase());
-        } catch {
-          mergedDomains.push("");
-        }
+    // the domain paired in the parallel array for citation attribution. Zip
+    // name+domain pairs BEFORE dropping empty rows (same as the save path) — a
+    // positional slice after filtering would shift domains onto the wrong
+    // competitor whenever an emptied slot precedes a filled one.
+    const keptPairs = competitors
+      .map((c, i) => ({ name: c.trim(), domain: competitorDomains[i] ?? "" }))
+      .filter((p) => p.name);
+    const merged = keptPairs.map((p) => p.name);
+    const mergedDomains = keptPairs.map((p) => p.domain);
+    for (const c of res.data) {
+      if (merged.length >= 5) break; // suggestions cap at 5 (SoV product intent)
+      if (merged.some((m) => m.toLowerCase() === c.name.toLowerCase())) continue;
+      merged.push(c.name);
+      try {
+        mergedDomains.push(new URL(c.url).host.replace(/^www\./, "").toLowerCase());
+      } catch {
+        mergedDomains.push("");
       }
-      setCompetitorDomains(padTo(mergedDomains, Math.max(3, merged.length), ""));
-      return padTo(merged, 3, "");
-    });
+    }
+    setCompetitors(padTo(merged, 3, ""));
+    setCompetitorDomains(padTo(mergedDomains, Math.max(3, merged.length), ""));
+    setStaggerFrom(keptPairs.length);
+    window.setTimeout(() => setStaggerFrom(null), 1200);
     toast.success(`Found ${res.data.length} competitors`);
   }
 
-  async function onFetchQueries() {
-    if (!brandUrl.trim() && !brandName.trim()) {
-      toast.error("Enter your brand or URL first");
-      return;
-    }
+  async function onGenerateQueries() {
+    if (!canGenerate || suggesting) return;
     setSuggesting(true);
     const res = await suggestQueriesAction({
       brand: brandName || brandUrl,
@@ -144,14 +383,38 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       toast.error(res.error);
       return;
     }
-    setQueries((prev) => Array.from(new Set([...prev, ...res.data])));
-    toast.success(`Added ${res.data.length} queries`);
+    const existing = new Set(queries.map((q) => q.toLowerCase()));
+    const fresh = res.data.filter((q) => !existing.has(q.toLowerCase()));
+    const room = Math.max(0, 30 - queries.length);
+    const added = fresh.slice(0, room);
+    setNewFrom(queries.length);
+    setFlashOn(true);
+    window.setTimeout(() => setFlashOn(false), 600);
+    window.setTimeout(() => setNewFrom(null), 1000);
+    setQueries((prev) => [...prev, ...added]);
+    toast.success(
+      fresh.length > room ? `Added ${added.length} (30 max)` : `Added ${added.length} queries`,
+    );
   }
 
-  function onSave() {
-    if (!brandUrl.trim()) {
-      toast.error("Brand URL is required");
-      return;
+  // ── Save ───────────────────────────────────────────────────────────────────
+  function handleSave() {
+    if (pending) return;
+    // Client gate mirrors zod SaveSchema — a blocked save never hits the server.
+    const urlErr = brandUrl.trim() ? urlProblem(brandUrl) : "Your site URL is required.";
+    setUrlError(urlErr);
+    if (urlErr || budgetErr || teamErr || weeksErr) {
+      const firstInvalid = urlErr
+        ? brandUrlRef.current
+        : budgetErr
+          ? budgetRef.current
+          : teamErr
+            ? teamRef.current
+            : weeksRef.current;
+      firstInvalid?.focus();
+      setShaking(true);
+      window.setTimeout(() => setShaking(false), 250);
+      return; // errors are already visible inline — no toast for client errors
     }
     startTransition(async () => {
       const kept = competitors
@@ -164,219 +427,653 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
         competitors: kept.map((c) => c.name),
         competitorDomains: kept.map((c) => c.domain),
         queries,
-        budgetUsd: Number(budget) || 0,
-        teamSize: Number(teamSize) || 1,
-        timelineWeeks: Number(timelineWeeks) || 8,
-        mode: "we_serve",
+        budgetUsd: numOr(budget, 400),
+        teamSize: Math.round(numOr(teamSize, 2)),
+        timelineWeeks: Math.round(numOr(timelineWeeks, 8)),
+        mode: mode === "self_serve" ? "self_serve" : "we_serve",
       });
       if (!res.ok) {
-        toast.error(res.error);
+        toast.error(res.error); // verbatim server error; dirty state kept
         return;
       }
-      toast.success(`Config saved (v${res.data.version})`);
+      setSavedVersion(res.data.version);
+      setSnapshot(
+        snapshotOf({
+          brandUrl,
+          brandName,
+          description,
+          competitors,
+          competitorDomains,
+          queries,
+          budget,
+          teamSize,
+          timelineWeeks,
+        }),
+      );
+      setChipKey((k) => k + 1); // chip zoom-in to "Saved · vN"
       router.refresh();
     });
   }
 
+  // Keep the latest save/dirty in a ref so global listeners never go stale.
+  const latest = useRef({ save: handleSave, isDirty, pending });
+  useEffect(() => {
+    latest.current = { save: handleSave, isDirty, pending };
+  });
+
+  // Cmd/Ctrl+S → save when dirty; no-op otherwise.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        const { save, isDirty: dirty, pending: busy } = latest.current;
+        if (dirty && !busy) save();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // beforeunload guard while dirty (in-app navigation is allowed in v1).
+  useEffect(() => {
+    if (!isDirty) return;
+    function warn(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
+  // Bottom fade only when the query list actually overflows its well.
+  useEffect(() => {
+    const viewport = wellRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
+    setOverflowing(Boolean(viewport && viewport.scrollHeight > viewport.clientHeight + 1));
+  }, [queries]);
+
   return (
-    <div className="space-y-3">
-      {/* Brand */}
-      <Card className="space-y-3 p-4">
-        <div className="space-y-2">
-          <Label htmlFor="brandUrl" className="flex items-center gap-1.5">
-            Brand URL <span className="text-danger">*</span>
-            <FieldHint text={HINTS.brandUrl} />
-          </Label>
-          <Input
-            id="brandUrl"
-            placeholder="pixelbin.io"
-            value={brandUrl}
-            onChange={(e) => setBrandUrl(e.target.value)}
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="brandName" className="flex items-center gap-1.5">
-              Brand name <FieldHint text={HINTS.brandName} />
-            </Label>
-            <Input
-              id="brandName"
-              placeholder="PixelBin"
-              value={brandName}
-              onChange={(e) => setBrandName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description" className="flex items-center gap-1.5">
-              What you do <FieldHint text={HINTS.description} />
-            </Label>
-            <Input
-              id="description"
-              placeholder="AI image & video processing SaaS"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-        </div>
-      </Card>
+    <>
+      <style>{"@keyframes gc-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}"}</style>
 
-      {/* Competitors */}
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center justify-between">
-          <Label className="flex items-center gap-1.5">
-            Competitors <FieldHint text={HINTS.competitors} />
-          </Label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onSuggestCompetitors}
-            disabled={discovering}
-          >
-            {discovering ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Wand2 className="h-3.5 w-3.5" />
-            )}
-            Suggest competitors
-          </Button>
-        </div>
-        <div className="space-y-2">
-          {competitors.map((c, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <Input
-                placeholder={`Competitor ${i + 1} name (or paste their URL)`}
-                value={c}
-                onChange={(e) => setCompetitor(i, e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeCompetitor(i)}
-                aria-label="Remove competitor"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          <Button type="button" variant="ghost" size="sm" onClick={addCompetitor}>
-            <Plus className="h-4 w-4" /> Add competitor
-          </Button>
-        </div>
-      </Card>
-
-      {/* Queries */}
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center justify-between">
-          <Label className="flex items-center gap-1.5">
-            Buyer-intent queries <FieldHint text={HINTS.queries} />
-          </Label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onFetchQueries}
-            disabled={suggesting}
-          >
-            {suggesting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Search className="h-3.5 w-3.5" />
-            )}
-            Fetch queries
-          </Button>
-        </div>
-        {queries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No queries yet. Use <span className="text-foreground">Fetch queries</span> or add
-            your own below.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {queries.map((q, i) => (
+      {/* A · Command bar — title · step progress · state chip · Save */}
+      <header className="flex h-12 shrink-0 items-center justify-between">
+        <div className="flex min-w-0 items-center">
+          <h1 className="text-lg font-semibold tracking-tight">Configure</h1>
+          <ol className="ml-4 flex items-center gap-1.5">
+            {steps.map((done, i) => (
               <li
                 key={i}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm"
-              >
-                <span className="min-w-0 truncate">{q}</span>
-                <button
-                  type="button"
-                  onClick={() => removeQuery(i)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                  aria-label="Remove query"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </li>
+                className={cn("size-1.5 rounded-full", done ? "bg-aurora" : "bg-white/15")}
+              />
             ))}
-          </ul>
-        )}
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="Add a query and press Enter"
-            value={newQuery}
-            onChange={(e) => setNewQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addQuery();
-              }
-            }}
-          />
-          <Button type="button" variant="outline" size="sm" onClick={addQuery}>
-            <Plus className="h-4 w-4" /> Add
+          </ol>
+          <span className="ml-2 text-xs text-muted-foreground">
+            {doneCount} of 4 steps done
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span
+            key={chipKey}
+            className={cn(
+              "animate-in fade-in zoom-in-95 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs duration-150",
+              isDirty
+                ? "border-warning/30 bg-warning/10 text-warning"
+                : savedVersion !== null
+                  ? "border-positive/30 bg-positive/10 text-positive"
+                  : "border-white/[0.12] bg-white/5 text-muted-foreground",
+            )}
+          >
+            {isDirty ? (
+              <>
+                <span className="size-1.5 animate-pulse rounded-full bg-warning" aria-hidden />
+                Unsaved changes
+              </>
+            ) : savedVersion !== null ? (
+              <>
+                <Check className="size-3.5" />
+                Saved · <span className="font-mono tabular-nums">v{savedVersion}</span>
+              </>
+            ) : (
+              "Not saved yet"
+            )}
+          </span>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={pending || !isDirty}
+            style={shaking ? { animation: "gc-shake 0.2s" } : undefined}
+            className={cn(
+              "h-9 min-w-24 rounded-full px-5 text-sm font-medium transition",
+              isDirty
+                ? "bg-aurora text-white shadow-[0_0_18px_rgba(124,58,237,0.35)] hover:brightness-110 active:scale-[0.98]"
+                : "bg-transparent text-muted-foreground opacity-40 shadow-none",
+            )}
+          >
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {pending ? "Saving…" : !isDirty && savedVersion !== null ? "Saved" : "Save"}
           </Button>
         </div>
-      </Card>
+      </header>
 
-      {/* Budget + team */}
-      <Card className="grid gap-3 p-4 sm:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor="budget" className="flex items-center gap-1.5">
-            <DollarSign className="h-3.5 w-3.5" /> Budget (USD) <FieldHint text={HINTS.budget} />
-          </Label>
-          <Input
-            id="budget"
-            type="number"
-            min={0}
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
+      {/* B · Step grid — three Tier-1 columns, reading order = step order */}
+      <div className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:items-stretch">
+        {/* B1 · Step 1 — Brand */}
+        <section className={cn(TIER1, "flex h-full flex-col gap-4 p-5 lg:col-span-4")}>
+          <CardHead
+            icon={Globe}
+            num="01"
+            title="Your brand"
+            done={steps[0]}
+            hint="We watch AI answers for citations of your site and mentions of your name."
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="team" className="flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Team size <FieldHint text={HINTS.team} />
-          </Label>
-          <Input
-            id="team"
-            type="number"
-            min={1}
-            value={teamSize}
-            onChange={(e) => setTeamSize(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="timeline" className="flex items-center gap-1.5">
-            <CalendarClock className="h-3.5 w-3.5" /> Timeline (wks){" "}
-            <FieldHint text={HINTS.timeline} />
-          </Label>
-          <Input
-            id="timeline"
-            type="number"
-            min={1}
-            value={timelineWeeks}
-            onChange={(e) => setTimelineWeeks(e.target.value)}
-          />
-        </div>
-      </Card>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="brandUrl" className={MICRO_LABEL}>
+                Brand URL <span className="text-destructive">*</span>
+              </label>
+              <div className="relative">
+                <Input
+                  id="brandUrl"
+                  ref={brandUrlRef}
+                  maxLength={300}
+                  placeholder="acme.com"
+                  value={brandUrl}
+                  aria-invalid={urlError ? true : undefined}
+                  aria-describedby="brandUrl-status"
+                  className={cn(FIELD, "pr-8")}
+                  onChange={(e) => {
+                    setBrandUrl(e.target.value);
+                    // Error clears the keystroke it becomes valid — never lags.
+                    if (urlError) {
+                      setUrlError(
+                        e.target.value.trim()
+                          ? urlProblem(e.target.value)
+                          : "Your site URL is required.",
+                      );
+                    }
+                  }}
+                  onBlur={() => setUrlError(brandUrl.trim() ? urlProblem(brandUrl) : null)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      brandNameRef.current?.focus();
+                    }
+                  }}
+                />
+                {urlError ? (
+                  <AlertCircle className="absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-destructive" />
+                ) : urlValid ? (
+                  <Check className="absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-positive" />
+                ) : null}
+              </div>
+              {/* Fixed-height status line — zero layout shift. */}
+              <p
+                id="brandUrl-status"
+                className={cn(
+                  "mt-1 h-4 truncate text-[11px]",
+                  urlError
+                    ? "text-destructive"
+                    : urlValid
+                      ? "text-muted-foreground"
+                      : "text-muted-foreground/70",
+                )}
+              >
+                {urlError ? (
+                  urlError
+                ) : urlValid && host ? (
+                  <>
+                    Tracking citations to <span className="text-foreground">{host}</span>
+                  </>
+                ) : (
+                  "e.g. acme.com — we derive your owned domains from it"
+                )}
+              </p>
+            </div>
 
-      <div className="flex items-center justify-end gap-3">
-        <Button onClick={onSave} disabled={pending}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save config
-        </Button>
+            <div>
+              <label htmlFor="brandName" className={MICRO_LABEL}>
+                Brand name
+              </label>
+              <Input
+                id="brandName"
+                ref={brandNameRef}
+                maxLength={120}
+                placeholder="Acme"
+                value={brandName}
+                className={FIELD}
+                onChange={(e) => setBrandName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    descriptionRef.current?.focus();
+                  }
+                }}
+              />
+              <p className="mt-1 h-4 text-[11px] text-muted-foreground">
+                Defaults to your domain name if blank.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="description" className={MICRO_LABEL}>
+                What you do
+              </label>
+              <Textarea
+                id="description"
+                ref={descriptionRef}
+                rows={2}
+                maxLength={1000}
+                placeholder="Issue tracking for modern software teams"
+                value={description}
+                className="h-14 min-h-0 resize-none rounded-xl border-white/10 bg-white/5 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-primary/50"
+                onChange={(e) => setDescription(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (
+                      document.getElementById("suggest-competitors") as HTMLButtonElement | null
+                    )?.focus();
+                  }
+                }}
+              />
+              <div className="mt-1 flex h-4 items-baseline justify-between gap-2 text-[11px]">
+                <span className="truncate text-muted-foreground">
+                  One line. Sharpens AI-generated competitors and queries.
+                </span>
+                {description.length > 900 && (
+                  <span className="shrink-0 text-warning tabular-nums">
+                    {description.length}/1000
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* B2 · Step 2 — Competitors */}
+        <section className={cn(TIER1, "flex h-full flex-col gap-3 p-5 lg:col-span-4")}>
+          <CardHead
+            icon={Swords}
+            num="02"
+            title="Competitors"
+            done={steps[1]}
+            hint={`Up to ${cap} rivals we score AI share-of-voice against.`}
+            badge={
+              <span
+                className={cn(
+                  TIER3,
+                  "ml-auto px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums",
+                )}
+              >
+                {filledCompetitors}/{cap}
+              </span>
+            }
+          />
+          <div>
+            <Button
+              id="suggest-competitors"
+              type="button"
+              variant="ghost"
+              className={AI_BTN}
+              disabled={!urlValid || discovering}
+              onClick={onSuggestCompetitors}
+            >
+              {discovering ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              {discovering ? "Finding competitors…" : "Suggest with AI"}
+            </Button>
+            {/* Static gate caption — never a tooltip, never a dead-click toast. */}
+            <p className="mt-1 h-4 text-[11px] text-muted-foreground">
+              {!urlValid ? "Add your site in step 1 to enable." : ""}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {competitors.map((c, i) => (
+              <div key={i}>
+                <div
+                  className={cn(
+                    "group relative flex items-center gap-2",
+                    staggerFrom !== null &&
+                      i >= staggerFrom &&
+                      "animate-in fade-in slide-in-from-left-1",
+                  )}
+                  style={
+                    staggerFrom !== null && i >= staggerFrom
+                      ? {
+                          animationDelay: `${(i - staggerFrom) * 150}ms`,
+                          animationFillMode: "backwards",
+                        }
+                      : undefined
+                  }
+                >
+                  <span className="w-4 text-right text-[11px] text-muted-foreground/60 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <Input
+                    ref={(el) => {
+                      compRefs.current[i] = el;
+                    }}
+                    value={c}
+                    maxLength={300}
+                    aria-label={`Competitor ${i + 1}`}
+                    placeholder={COMPETITOR_PLACEHOLDERS[i] ?? "Competitor name or URL"}
+                    className={cn(FIELD, "flex-1 pr-20")}
+                    onChange={(e) => setCompetitor(i, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      if (i === competitors.length - 1 && competitors.length < cap) {
+                        addCompetitor();
+                        requestAnimationFrame(() => compRefs.current[i + 1]?.focus());
+                      } else {
+                        compRefs.current[i + 1]?.focus();
+                      }
+                    }}
+                  />
+                  {competitorDomains[i] ? (
+                    <span
+                      className={cn(
+                        TIER3,
+                        "pointer-events-none absolute top-1/2 right-11 max-w-[90px] -translate-y-1/2 truncate px-1.5 py-0.5 text-[10px] text-muted-foreground",
+                      )}
+                    >
+                      {competitorDomains[i]}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => removeCompetitor(i)}
+                    aria-label="Remove competitor"
+                    className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/[0.06] hover:text-destructive focus-visible:opacity-100"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                {isDupe(i) && (
+                  <p className="mt-1 pl-6 text-[11px] text-destructive">Already in your list.</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {competitors.length < cap ? (
+            <button
+              type="button"
+              onClick={addCompetitor}
+              className="flex h-8 items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Plus className="size-3.5" />
+              Add competitor
+            </button>
+          ) : (
+            <p className="flex h-8 items-center text-[11px] text-muted-foreground">
+              Limit reached — remove one to add another.
+            </p>
+          )}
+        </section>
+
+        {/* B3 · Step 3 — Buyer queries (the page's ONLY scrollable region) */}
+        <section
+          className={cn(TIER1, "flex h-full flex-col gap-3 p-5 lg:col-span-4 lg:min-h-0")}
+        >
+          <CardHead
+            icon={MessagesSquare}
+            num="03"
+            title="Buyer queries"
+            done={steps[2]}
+            hint="Prompts we ask ChatGPT-style panels. 5–10 focused queries beat 30 broad ones."
+            badge={
+              <span
+                className={cn(
+                  TIER3,
+                  "ml-auto px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
+                  queries.length >= 30 ? "text-warning" : "text-muted-foreground",
+                )}
+              >
+                {queries.length}/30
+              </span>
+            }
+          />
+          <div>
+            <Button
+              type="button"
+              variant="ghost"
+              className={AI_BTN}
+              disabled={!canGenerate || suggesting}
+              onClick={onGenerateQueries}
+            >
+              {suggesting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {suggesting ? "Generating…" : "Generate from brand"}
+            </Button>
+            <p className="mt-1 h-4 text-[11px] text-muted-foreground">
+              {!canGenerate ? "Needs step 1 first." : ""}
+            </p>
+          </div>
+
+          {/* Tier-2 recessed well wrapping the internal ScrollArea. */}
+          <div ref={wellRef} className={cn(TIER2, "relative min-h-40 flex-1 lg:min-h-0")}>
+            <ScrollArea className="h-full px-2 py-1.5">
+              {queries.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+                  <Sparkles className="h-4 w-4 text-violet-300/60" />
+                  <p className="text-sm text-muted-foreground">No queries yet</p>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    Generate from your brand above, or type one below.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-0.5">
+                  {queries.map((q, i) => (
+                    <li
+                      key={`${i}-${q}`}
+                      className={cn(
+                        "group flex items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-sm leading-snug transition-colors hover:bg-white/5",
+                        newFrom !== null &&
+                          i >= newFrom &&
+                          "animate-in fade-in slide-in-from-bottom-1 duration-300",
+                        flashOn && newFrom !== null && i >= newFrom && "bg-primary/10",
+                      )}
+                    >
+                      <span className="line-clamp-2 min-w-0">{q}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeQuery(i)}
+                        aria-label="Remove query"
+                        className="mt-0.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ScrollArea>
+            {overflowing && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-gradient-to-t from-[#0B1020]/80" />
+            )}
+          </div>
+
+          {/* Composer — Enter is the affordance; ↵ keycap teaches it. */}
+          <div className="shrink-0">
+            <div className="relative">
+              <Input
+                value={newQuery}
+                maxLength={400}
+                placeholder="best issue tracker for startups"
+                aria-label="Add a query"
+                className={cn(FIELD, "pr-9", composerFlash && "border-warning")}
+                onChange={(e) => {
+                  setNewQuery(e.target.value);
+                  setComposerMsg(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addQuery(); // add, clear, keep focus — rapid entry
+                  } else if (e.key === "Backspace" && !newQuery) {
+                    setQueries((prev) => prev.slice(0, -1)); // chip-input convention
+                  }
+                }}
+              />
+              {newQuery && (
+                <span
+                  aria-hidden
+                  className="absolute top-1/2 right-3 -translate-y-1/2 rounded border border-white/10 px-1 text-[10px] text-muted-foreground/50"
+                >
+                  ↵
+                </span>
+              )}
+            </div>
+            <p className="mt-1 h-4 text-[11px] text-warning">{composerMsg ?? ""}</p>
+          </div>
+        </section>
       </div>
-    </div>
+
+      {/* C · Step 4 strip — Plan & platform */}
+      <div
+        className={cn(
+          TIER1,
+          "mt-4 flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3 lg:h-[72px] lg:flex-nowrap lg:py-0",
+        )}
+      >
+        <div className="flex shrink-0 items-center gap-2.5">
+          {/* Step 4 has defaults — always complete, numeral always positive. */}
+          <span className="font-mono text-[10px] tracking-wider text-positive">04</span>
+          <div>
+            <div className="text-sm font-semibold">Plan &amp; platform</div>
+            <div className="text-[11px] text-muted-foreground">Sizes your action plan</div>
+          </div>
+        </div>
+
+        <div className="flex items-end gap-3">
+          <div className="w-[104px]">
+            <label
+              htmlFor="budget"
+              className={cn(
+                "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium",
+                budgetErr
+                  ? "text-destructive whitespace-nowrap"
+                  : "text-muted-foreground uppercase tracking-[0.08em]",
+              )}
+            >
+              {budgetErr ?? (
+                <>
+                  <DollarSign className="h-3 w-3 text-muted-foreground" /> Budget $
+                </>
+              )}
+            </label>
+            <Input
+              id="budget"
+              ref={budgetRef}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={1000000}
+              step={100}
+              aria-invalid={budgetErr ? true : undefined}
+              value={budget}
+              className={cn(FIELD, "text-sm tabular-nums")}
+              onChange={(e) => setBudget(e.target.value)}
+              onBlur={() => setBudget((v) => clampOnBlur(v, 0, 1_000_000, 400))}
+            />
+          </div>
+          <div className="w-[104px]">
+            <label
+              htmlFor="team"
+              className={cn(
+                "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium",
+                teamErr
+                  ? "text-destructive whitespace-nowrap"
+                  : "text-muted-foreground uppercase tracking-[0.08em]",
+              )}
+            >
+              {teamErr ?? (
+                <>
+                  <Users className="h-3 w-3 text-muted-foreground" /> Team
+                </>
+              )}
+            </label>
+            <Input
+              id="team"
+              ref={teamRef}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={100}
+              step={1}
+              aria-invalid={teamErr ? true : undefined}
+              value={teamSize}
+              className={cn(FIELD, "text-sm tabular-nums")}
+              onChange={(e) => setTeamSize(e.target.value)}
+              onBlur={() => setTeamSize((v) => clampOnBlur(v, 1, 100, 2))}
+            />
+          </div>
+          <div className="w-[104px]">
+            <label
+              htmlFor="timeline"
+              className={cn(
+                "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium",
+                weeksErr
+                  ? "text-destructive whitespace-nowrap"
+                  : "text-muted-foreground uppercase tracking-[0.08em]",
+              )}
+            >
+              {weeksErr ?? (
+                <>
+                  <CalendarClock className="h-3 w-3 text-muted-foreground" /> Weeks
+                </>
+              )}
+            </label>
+            <Input
+              id="timeline"
+              ref={weeksRef}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={104}
+              step={1}
+              aria-invalid={weeksErr ? true : undefined}
+              value={timelineWeeks}
+              className={cn(FIELD, "text-sm tabular-nums")}
+              onChange={(e) => setTimelineWeeks(e.target.value)}
+              onBlur={() => setTimelineWeeks((v) => clampOnBlur(v, 1, 104, 8))}
+            />
+          </div>
+        </div>
+
+        {/* Derived capacity readout — assumption pinned in UI, not a tooltip. */}
+        <div className="shrink-0 self-center">
+          <div className="text-[11px] text-muted-foreground">
+            ≈{" "}
+            <span
+              key={hours}
+              className="animate-in fade-in zoom-in-95 text-base font-semibold text-aurora tabular-nums duration-200"
+            >
+              {hours.toLocaleString("en-US")}
+            </span>{" "}
+            person-hrs
+          </div>
+          <div className="text-[10px] text-muted-foreground/70 tabular-nums">
+            {teamN} people × {weeksN} wks × ~25 hrs/wk
+          </div>
+        </div>
+
+        <Separator orientation="vertical" className="hidden h-8 self-center bg-white/10 lg:block" />
+
+        <ConfigurePlatform mode={mode} onModeChange={setMode} />
+      </div>
+    </>
   );
 }

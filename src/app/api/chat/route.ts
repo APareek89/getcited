@@ -419,7 +419,7 @@ export async function POST(req: Request) {
           topic: z
             .string()
             .min(3)
-            .describe("The assignment, e.g. 'PixelBin vs Cloudinary comparison' or 'answer: best background remover'."),
+            .describe("The assignment, e.g. 'YourBrand vs Competitor comparison' or 'answer: best tool for X'."),
         }),
         async execute({ type, topic }) {
           const cfg = await getActiveConfig();

@@ -294,7 +294,7 @@ const handler = createMcpHandler(
       "Write GEO-optimized content for a tactic: blog_post, comparison_page, reddit_answer, linkedin_post, guest_post_pitch, review_request_email, youtube_brief. Returns markdown.",
       {
         type: z.enum(CONTENT_TYPES),
-        topic: z.string().min(3).describe("The assignment, e.g. 'PixelBin vs Cloudinary comparison page'."),
+        topic: z.string().min(3).describe("The assignment, e.g. 'YourBrand vs Competitor comparison page'."),
       },
       async (args, extra) => {
         const userId = userIdOf(extra.authInfo);

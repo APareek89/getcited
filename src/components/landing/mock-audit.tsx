@@ -12,8 +12,8 @@ interface SovEntry {
 }
 
 export function MockAudit() {
-  const [brand, setBrand] = useState("PixelBin");
-  const [competitors, setCompetitors] = useState<string[]>(["Cloudinary", "ImageKit"]);
+  const [brand, setBrand] = useState("Linear");
+  const [competitors, setCompetitors] = useState<string[]>(["Jira", "Asana"]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SovEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -145,8 +145,8 @@ export function MockAudit() {
             ))}
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            This is illustrative mock data. Sign in and add your keys to run a real panel
-            across Claude, Perplexity, Gemini &amp; Groq.
+            This is illustrative mock data. Sign in to run a real panel across Claude &amp;
+            Perplexity — Gemini and Llama-class models available with your keys.
           </p>
         </div>
       )}

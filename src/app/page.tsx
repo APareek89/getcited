@@ -1,34 +1,167 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  Sparkles,
-  ArrowRight,
-  ServerCog,
-  KeyRound,
-  Check,
-  Search,
-  Target,
-  LineChart,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { ButtonLink } from "@/components/ui/button-link";
-import { MockAudit } from "@/components/landing/mock-audit";
+import { Logo } from "@/components/logo";
+import {
+  SITE_URL,
+  PAGE_TITLE,
+  PAGE_DESCRIPTION,
+  OG_TITLE,
+  OG_DESCRIPTION,
+  FAQS,
+} from "@/components/landing/landing-data";
+import { Hero } from "@/components/landing/hero";
+import { WhyVisibility } from "@/components/landing/why-visibility";
+import { Acts } from "@/components/landing/acts";
+import { McpSection } from "@/components/landing/mcp-section";
+import { Methodology, KeyCustody } from "@/components/landing/trust";
+import { FaqSection } from "@/components/landing/faq-section";
+import { FinalCta } from "@/components/landing/final-cta";
+import { StickyCta } from "@/components/landing/sticky-cta";
+
+/**
+ * canonical and og:url are rendered as literal tags inside <Home /> (React 19
+ * hoists them into <head>) because the Metadata API normalizes a root URL to
+ * its origin, dropping the trailing slash — and we want the exact same
+ * `${SITE_URL}/` form in canonical, og:url, and the JSON-LD below.
+ */
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
+  openGraph: {
+    title: OG_TITLE,
+    description: OG_DESCRIPTION,
+    siteName: "GetCited",
+    type: "website",
+    images: ["/logo.png"],
+  },
+  twitter: {
+    card: "summary",
+    title: OG_TITLE,
+    description: OG_DESCRIPTION,
+    images: ["/logo.png"],
+  },
+};
+
+/**
+ * Single JSON-LD @graph: Organization ↔ WebSite ↔ WebPage ↔ SoftwareApplication
+ * + FAQPage. Deliberately sparse and truthful: no sameAs, no contactPoint, no
+ * aggregateRating/review (none exist), and price 0 only — the free audit is the
+ * only public price. FAQ answers are the exact strings rendered in the DOM.
+ */
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "GetCited",
+      url: `${SITE_URL}/`,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/logo.png`,
+      },
+      description:
+        "GetCited is an AI visibility tool that measures how AI assistants cite and recommend brands, then produces a costed, trackable action plan.",
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: "GetCited",
+      url: `${SITE_URL}/`,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+    {
+      "@type": "WebPage",
+      "@id": `${SITE_URL}/#webpage`,
+      url: `${SITE_URL}/`,
+      name: PAGE_TITLE,
+      description: PAGE_DESCRIPTION,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      about: { "@id": `${SITE_URL}/#software` },
+      mainEntity: { "@id": `${SITE_URL}/#software` },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${SITE_URL}/#software`,
+      name: "GetCited",
+      applicationCategory: "BusinessApplication",
+      applicationSubCategory: "AI visibility / generative engine optimization software",
+      operatingSystem: "Web",
+      url: `${SITE_URL}/`,
+      description: PAGE_DESCRIPTION,
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+        description: "Free instant AI visibility audit — no signup required",
+      },
+      featureList: [
+        "Multi-LLM AI visibility panel (Claude, Perplexity; Gemini and Llama available)",
+        "AI share of voice, citation share and sentiment tracking",
+        "Competitor benchmarking on identical queries",
+        "Citation-source crawling and gap diagnosis",
+        "Costed action plan with per-tactic WHAT/WHY/HOW/WHO and weekly timeline",
+        "DOCX/PDF/Excel plan export",
+        "Editable execution tracker with plain-language progress Q&A",
+        "MCP connector for Claude — 9 tools, OAuth 2.1 + PKCE",
+      ],
+    },
+    {
+      "@type": "FAQPage",
+      "@id": `${SITE_URL}/#faq`,
+      mainEntity: FAQS.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    },
+  ],
+};
+
+const NAV_LINKS = [
+  { href: "#how-it-works", label: "How it works" },
+  { href: "#methodology", label: "Methodology" },
+  { href: "#mcp", label: "MCP" },
+  { href: "#faq", label: "FAQ" },
+];
+
+const FOOTER_LINKS = [
+  { href: "#faq", label: "What is generative engine optimization?" },
+  { href: "#why-ai-visibility", label: "GEO vs SEO vs AEO explained" },
+  { href: "#methodology", label: "How the GetCited panel methodology works" },
+  { href: "/connector", label: "MCP connector setup" },
+];
 
 export default async function Home() {
   const user = await getUser();
-  const primaryHref = user ? "/configure" : "/login";
-  const primaryLabel = user ? "Go to app" : "Get started";
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col overflow-x-clip">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {/* Hoisted to <head> by React 19 — see the metadata comment above. */}
+      <link rel="canonical" href={`${SITE_URL}/`} />
+      <meta property="og:url" content={`${SITE_URL}/`} />
+
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-aurora">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-semibold tracking-tight">GetCited</span>
+      <header className="glass-header sticky top-0 z-30">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+          <Link href="/">
+            <Logo />
           </Link>
+          <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
+            {NAV_LINKS.map((l) => (
+              <a key={l.href} href={l.href} className="transition-colors hover:text-foreground">
+                {l.label}
+              </a>
+            ))}
+          </nav>
           <div className="flex items-center gap-2">
             {user ? (
               <ButtonLink size="sm" href="/configure">
@@ -39,7 +172,11 @@ export default async function Home() {
                 <ButtonLink variant="ghost" size="sm" href="/login">
                   Sign in
                 </ButtonLink>
-                <ButtonLink size="sm" href="/login">
+                <ButtonLink
+                  size="sm"
+                  href="/login"
+                  className="bg-aurora border-0 text-white hover:opacity-90"
+                >
                   Get started
                 </ButtonLink>
               </>
@@ -48,107 +185,51 @@ export default async function Home() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-6 py-16 md:grid-cols-2 md:py-24">
-        <div>
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-positive" />
-            Measure · Diagnose · Plan · Track
-          </div>
-          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-            Get cited by AI.{" "}
-            <span className="text-aurora">Know exactly what to do.</span>
-          </h1>
-          <p className="mt-4 max-w-lg text-pretty text-base text-muted-foreground sm:text-lg">
-            GetCited measures whether AI assistants recommend your brand, then turns it
-            into a <span className="text-foreground">costed, committed action plan</span> —
-            grounded in how competitors are actually cited, not vibes.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <ButtonLink size="lg" href={primaryHref} className="bg-aurora border-0 text-white hover:opacity-90">
-              {primaryLabel} <ArrowRight className="h-4 w-4" />
-            </ButtonLink>
-            <span className="text-sm text-muted-foreground">
-              No credit card. Try the free audit →
-            </span>
-          </div>
+      {/* 11 sections, in spec order */}
+      <Hero />
+      <WhyVisibility />
+      <Acts />
+      <McpSection />
+      <Methodology />
+      <KeyCustody />
+      <FaqSection />
+      <FinalCta />
 
-          <ul className="mt-8 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-            <li className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-primary" /> Real AI panel
-            </li>
-            <li className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-primary" /> Costed plan
-            </li>
-            <li className="flex items-center gap-2">
-              <LineChart className="h-4 w-4 text-primary" /> Tracked impact
-            </li>
-          </ul>
-        </div>
-
-        <div className="md:pl-6">
-          <MockAudit />
-        </div>
-      </section>
-
-      {/* We Serve / Self Serve split */}
-      <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <h2 className="mb-6 text-center text-lg font-medium text-muted-foreground">
-          Two ways to run it
-        </h2>
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="rounded-2xl border border-border bg-card p-6">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
-              <ServerCog className="h-5 w-5 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">We Serve</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Use our infrastructure and keys. Sign in, configure, and run — nothing to set up.
-            </p>
-            <ul className="mt-4 space-y-2 text-sm">
-              {["Our Claude + Perplexity panel", "Managed crawling & storage", "Fastest path to a plan"].map(
-                (f) => (
-                  <li key={f} className="flex items-center gap-2 text-muted-foreground">
-                    <Check className="h-4 w-4 text-positive" /> {f}
-                  </li>
-                ),
-              )}
-            </ul>
-            <ButtonLink className="mt-5" variant="outline" href={primaryHref}>
-              {primaryLabel} <ArrowRight className="h-4 w-4" />
-            </ButtonLink>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-6">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
-              <KeyRound className="h-5 w-5 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">Self Serve</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Bring your own keys or self-host. Session keys by default; opt in to encrypted storage.
-            </p>
-            <ul className="mt-4 space-y-2 text-sm">
-              {["Your API keys, your control", "Session or AES-GCM encrypted keys", "One-click deploy your own instance"].map(
-                (f) => (
-                  <li key={f} className="flex items-center gap-2 text-muted-foreground">
-                    <Check className="h-4 w-4 text-positive" /> {f}
-                  </li>
-                ),
-              )}
-            </ul>
-            <ButtonLink className="mt-5" variant="outline" href={primaryHref}>
-              Bring your keys <ArrowRight className="h-4 w-4" />
-            </ButtonLink>
-          </div>
-        </div>
-      </section>
-
+      {/* Footer — honest links only: on-page anchors + the real connector page */}
       <footer className="border-t border-border/60">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 text-xs text-muted-foreground">
-          <span>© GetCited</span>
-          <span>Projections are modeled estimates, not guarantees.</span>
+        <div className="mx-auto max-w-7xl px-6 py-10">
+          <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+            <Logo />
+            <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+              {FOOTER_LINKS.map((l) =>
+                l.href.startsWith("#") ? (
+                  <a
+                    key={l.label}
+                    href={l.href}
+                    className="underline underline-offset-4 transition-colors hover:text-foreground"
+                  >
+                    {l.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={l.label}
+                    href={l.href}
+                    className="underline underline-offset-4 transition-colors hover:text-foreground"
+                  >
+                    {l.label}
+                  </Link>
+                ),
+              )}
+            </nav>
+          </div>
+          <div className="mt-8 flex flex-col justify-between gap-2 border-t border-border/60 pt-6 text-xs text-muted-foreground md:flex-row">
+            <span>© {new Date().getFullYear()} GetCited</span>
+            <span>Projections are modeled estimates, not guarantees.</span>
+          </div>
         </div>
       </footer>
+
+      <StickyCta />
     </div>
   );
 }

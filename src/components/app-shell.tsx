@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, SlidersHorizontal, Bot, Plug, ListChecks, LayoutDashboard, LogOut } from "lucide-react";
+import { Home, SlidersHorizontal, Bot, Plug, ListChecks, LayoutDashboard, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/logo";
 
 const NAV = [
+  { href: "/", label: "Home", icon: Home },
   { href: "/configure", label: "Configure", icon: SlidersHorizontal },
   { href: "/assistant", label: "GEO Agent", icon: Bot },
   { href: "/connector", label: "GEO MCP", icon: Plug },
@@ -26,16 +28,17 @@ export function AppShell({
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-50 glass-header">
         <div className="flex h-14 items-center gap-4 px-5">
-          <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-aurora">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
+          <Link href="/" className="flex shrink-0 items-center gap-2">
+            <LogoMark className="h-7 w-7" />
             <span className="hidden font-semibold tracking-tight sm:inline">GetCited</span>
           </Link>
 
           <nav className="flex flex-1 items-center gap-1 pl-3">
             {NAV.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
               return (
                 <Link
