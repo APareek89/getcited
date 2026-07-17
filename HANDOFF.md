@@ -7,7 +7,7 @@
 > canonical source lives in the sibling `geo-radar-mcp` repo under `docs/`).
 
 ## Golden rules (do not break)
-- Repo stays **PRIVATE**. Local git only, **no remote**, never publish.
+- Repo stays **PRIVATE**: https://github.com/APareek89/getcited (private remote). Never make public.
 - **Never log/expose API key values.** Only ever check presence. `.env.local` is gitignored.
 - Projections are **modeled estimates**, never guarantees: list assumptions + a confidence band.
 - Respect **robots.txt + rate limits** when crawling. Ask before any paid/live external call in a build step.
@@ -73,11 +73,9 @@ Next.js 16 App Router + TS (src dir) · Tailwind **v4** + shadcn/ui (**Base UI**
 4. **Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted)** ← DONE
 5. **Dashboard (KPIs, trend, leaderboard, active plan/progress, downloads)** ← DONE
 
-> **First full version COMPLETE** (all 6 phases). Landing → auth → Configure (+Self Serve) →
-> Agent Mode (4 cards, streaming, reports) → Dashboard. All green.
-3. Crawling + scoring engine (`plan.ts` allocator + `projectImpact`) + cards 1–4 + reports (PDF/Excel/HTML) — **unit tests required**
-4. Self Serve: Configure Platform (3 options) + BYOK (session vs encrypted-stored)
-5. Dashboard (KPIs, trend, leaderboard, active plan/progress, alerts, downloads)
+> **First full version COMPLETE** (all 6 phases) + v1.1 + MCP connector + Aurora Glass re-theme.
+> Landing → auth → Configure (+Self Serve) → GEO Agent (5 cards, threads, memory, content-gen) →
+> GEO MCP → Dashboard. All green.
 
 ## `.env.local` keys by phase
 - **Phase 0/1 (must-have):** `ANTHROPIC_API_KEY` ✅(copied), `KEY_ENCRYPTION_SECRET` ✅(generated),
