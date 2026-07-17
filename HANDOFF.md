@@ -196,7 +196,19 @@ observability/logger (dropped in port — currently errors only surface as clien
   deploy (or tunnel) to install in claude.ai; the wiring derives issuer from the request origin.
 - **Diagrams:** `docs/mermaid/01-mcp-auth-flow.mmd` (+ master updated); viewer `docs/architecture-flow.html`.
 
-## Render migration — GetCited takes over https://geo-radar-mcp.onrender.com (2026-07-17, IN PROGRESS)
+## Render migration — GetCited takes over https://geo-radar-mcp.onrender.com (2026-07-17, ✅ LIVE)
+**DONE via Render API** (key at `~/.claude/secrets/render-api-key`, chmod 600): blueprint
+`exs-d9c7vj7avr4c73aim76g` disconnected · env swapped on web service `srv-d9c81pfavr4c73air3j0`
+(fresh OAUTH_SIGNING_SECRET generated server-side; Auth0/quota/redis vars deleted) · source →
+`APareek89/getcited@main` (build `corepack enable && pnpm install --frozen-lockfile && pnpm build`,
+start `pnpm start`, healthCheckPath /healthz, plan **starter** — already paid, no upgrade needed) ·
+worker `srv-d9c81pfavr4c73air3ig` suspended (geo-radar-redis left running, geo-radar-db kept) ·
+deploy `5d40b7f` live 2026-07-17. **Prod smoke ALL PASS:** /healthz 200 · PR docs resource=
+`https://geo-radar-mcp.onrender.com/mcp` + CORS (root + path-suffixed) · AS metadata https ·
+POST /mcp → 401 + WWW-Authenticate · DCR register wrote to Supabase from Render · static-key
+initialize → serverInfo getcited. **Remaining (user):** Supabase redirect allow-list
+`https://geo-radar-mcp.onrender.com/auth/callback` + re-auth connector in claude.ai (old Auth0
+tokens hard-fail → clean 401 → automatic re-auth at the SAME connector URL).
 Goal: the existing Render web service `geo-radar-mcp` (Blueprint-managed, Auth0-proxy OAuth, worker+
 Redis+Postgres siblings) starts serving GetCited at the SAME URL; claude.ai connectors pointing at
 `https://geo-radar-mcp.onrender.com/mcp` re-auth in place (Auth0 tokens die at cutover; users sign into
