@@ -1,5 +1,6 @@
 # Loop.MD — GetCited
 status: on
+<!-- 2026-07-17 later: user granted a $2 paid-eval budget for this session; 3 paid confirmations run (journal below), ~$0.05 spent. Standing constraint returns to free-only unless re-granted.
 <!-- Turned ON 2026-07-17 (user: "free evals only, no API calls"). Constraint: the loop
      runs typecheck/lint/vitest + the evals below ONLY via mock mode / pure functions /
      code inspection — never a real LLM, crawl, or other paid/API call. Evals needing a
@@ -44,3 +45,6 @@ presented as a modeled estimate with listed assumptions + a confidence band.
 ## Run journal (paid/slow checks only)
 | Date | Hypothesis (changed X, expect eval N to flip because W) | Result |
 |------|----------------------------------------------------------|--------|
+| 2026-07-17 | H1: post-redesign, MCP run_benchmark (real Claude+Perplexity panel, override brand Linear vs Jira/Asana, 2 queries) returns SoV summing ~1 (or all-0), per-prompt rows, 0<cost_usd<cap — provider wiring survived the endpoint move + redesign | pending |
+| 2026-07-17 | H2: Configure "Suggest with AI" + "Generate from brand" (live LLM) return ≥3 plausible competitors / ≥5 queries for a real brand via the NEW form UI — server-action wiring survived the rebuild | ✅ PASS — 5/5 competitors (Jira, Asana, Monday.com, Notion; merged w/ existing), 10/30 queries generated |
+| 2026-07-17 | H3: MCP build_plan on H1's report_id yields tactics within budget, roadmap weeks with WHAT/WHY/HOW/WHO, projection confidence ≠ "high" (crawl-grounded medium ok), and the DOCX export downloads — plan pipeline intact end-to-end | ✅ PASS — 6 tactics $400≤$500, conf=medium, 6 assumptions, 10 entries across weeks 1-8 w/ action/why/how/owner/hours/deliverable, DOCX 200 (21KB valid) |

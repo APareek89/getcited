@@ -41,6 +41,23 @@ dates/why/how/guidelines) · PlanResult collapsed to summary + Word/PDF/Excel/HT
 reads tracker_items PRIMARY (re_benchmark:true optional+paid), MCP parity (`approve_plan` +
 `get_tracker` in the MCP route). Nav: Configure · GEO Agent · GEO MCP · Tracker · Dashboard.
 
+## Site redesign round (2026-07-17 evening, "free hand") — ✅ SHIPPED (commit ba5eaa5)
+Multi-agent judged designs → implemented → claims-audited → fixed: SEO homepage (11 sections,
+JSON-LD @graph incl. FAQPage w/ 12 byte-matched FAQs, keywords: ai visibility tool / ai search
+optimization; NO fabricated proof — every product claim fact-checked vs code, ChatGPT/per-engine/
+multi-run overclaims removed), Quotecast logo (src/components/logo.tsx, per-instance gradient ids
+via useId; favicon src/app/icon.svg; /logo.png for OG+JSON-LD), Home nav tab, /configure rebuilt
+(command bar w/ progress+dirty+Cmd+S, numbered zones, queries sole scroll region, plan strip w/
+live person-hrs, keys dialog; FIXED: suggest domain cross-pairing, >5-competitor silent truncation).
+BYO session keys: localStorage → sessionStorage (matches "session-only" promise). PixelBin scrubbed
+from all user-facing surfaces (demo now Linear/Jira/Asana; prompt-library demo set re-themed).
+**QA harness**: scripts/qa-browser.py — creates qa-harness@getcited.local (Supabase admin), password
+grant, builds sb-…-auth-token cookie (base64url, 3180-char chunks), drives headless Chromium
+(executable_path pinned to ms-playwright chromium_headless_shell-1228) → screenshots all pages authed.
+**Loop evals: 7/7 free PASS** (1-4,6 = vitest; 5 = harness browser save→reload; 7 = key-handling audit)
+**+ 3 paid confirmations PASS** (~$0.05 of the user-granted $2): real benchmark (SoV sums 1.0,
+$0.0085), live AI suggest/generate in new UI, build_plan→roadmap WHAT/WHY/HOW/WHO→DOCX. Journal in Loop.MD.
+
 ## Next session — pending points (2026-07-17)
 0. **User validates live** (all auth-gated): round-2 UI fixes (nav-left, header bleed on /dashboard,
    Configure 2-col no-scroll, chat width) + full Tracker flow: build plan → agent asks approval →
