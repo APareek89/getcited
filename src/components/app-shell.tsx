@@ -23,7 +23,7 @@ export function AppShell({
   const pathname = usePathname();
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-40 glass border-x-0 border-t-0">
+      <header className="sticky top-0 z-50 glass-header">
         <div className="flex h-14 items-center gap-4 px-5">
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-aurora">
@@ -32,7 +32,7 @@ export function AppShell({
             <span className="hidden font-semibold tracking-tight sm:inline">GetCited</span>
           </Link>
 
-          <nav className="flex flex-1 items-center justify-center gap-1">
+          <nav className="flex flex-1 items-center gap-1 pl-3">
             {NAV.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;

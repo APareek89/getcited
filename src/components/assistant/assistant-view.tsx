@@ -249,9 +249,9 @@ export function AssistantView() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <>
-            {/* Messages */}
+            {/* Messages (wider than the composer for readable tool-result cards) */}
             <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
-              <div className="mx-auto max-w-2xl space-y-5">
+              <div className="mx-auto max-w-4xl space-y-5">
                 {messages.length === 0 ? (
                   <div className="pt-8 text-center">
                     <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-card">

@@ -88,7 +88,7 @@ export function ConfigurePlatform({ initialMode }: { initialMode: string }) {
   }
 
   return (
-    <Card className="space-y-5 p-5">
+    <Card className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-medium">Platform</div>

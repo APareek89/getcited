@@ -53,11 +53,11 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   const [brandName, setBrandName] = useState(initial?.brandName ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [competitors, setCompetitors] = useState<string[]>(
-    padTo(initial?.competitors ?? [], 5, ""),
+    padTo(initial?.competitors ?? [], 3, ""),
   );
   // Parallel domains (same index as competitors); filled by Suggest, "" otherwise.
   const [competitorDomains, setCompetitorDomains] = useState<string[]>(
-    padTo(initial?.competitorDomains ?? [], 5, ""),
+    padTo(initial?.competitorDomains ?? [], 3, ""),
   );
   const [queries, setQueries] = useState<string[]>(initial?.queries ?? []);
   const [newQuery, setNewQuery] = useState("");
@@ -122,8 +122,8 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
           mergedDomains.push("");
         }
       }
-      setCompetitorDomains(padTo(mergedDomains, Math.max(5, merged.length), ""));
-      return padTo(merged, 5, "");
+      setCompetitorDomains(padTo(mergedDomains, Math.max(3, merged.length), ""));
+      return padTo(merged, 3, "");
     });
     toast.success(`Found ${res.data.length} competitors`);
   }
@@ -179,20 +179,9 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6 md:p-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Configure</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tell us your brand, competitors, queries, budget and team. Saved as a version
-          you can revisit.{" "}
-          {initial ? (
-            <span className="text-muted-foreground/80">Editing from v{initial.version}.</span>
-          ) : null}
-        </p>
-      </div>
-
+    <div className="space-y-3">
       {/* Brand */}
-      <Card className="space-y-5 p-5">
+      <Card className="space-y-3 p-4">
         <div className="space-y-2">
           <Label htmlFor="brandUrl" className="flex items-center gap-1.5">
             Brand URL <span className="text-danger">*</span>
@@ -205,7 +194,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
             onChange={(e) => setBrandUrl(e.target.value)}
           />
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="brandName" className="flex items-center gap-1.5">
               Brand name <FieldHint text={HINTS.brandName} />
@@ -232,7 +221,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       </Card>
 
       {/* Competitors */}
-      <Card className="space-y-4 p-5">
+      <Card className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-1.5">
             Competitors <FieldHint text={HINTS.competitors} />
@@ -278,7 +267,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       </Card>
 
       {/* Queries */}
-      <Card className="space-y-4 p-5">
+      <Card className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-1.5">
             Buyer-intent queries <FieldHint text={HINTS.queries} />
@@ -342,7 +331,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       </Card>
 
       {/* Budget + team */}
-      <Card className="grid gap-5 p-5 sm:grid-cols-3">
+      <Card className="grid gap-3 p-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="budget" className="flex items-center gap-1.5">
             <DollarSign className="h-3.5 w-3.5" /> Budget (USD) <FieldHint text={HINTS.budget} />
