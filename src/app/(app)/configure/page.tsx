@@ -11,8 +11,9 @@ export default async function ConfigurePage() {
     // rail switches the Business Context / Platform panels: the query list
     // (zone B3) is the only internal scroll region on Business Context, and
     // the Platform panel may scroll internally. Below lg everything stacks and
-    // the guarantee is intentionally relaxed.
-    <div className="mx-auto flex w-full max-w-7xl flex-col px-6 pt-3 pb-4 lg:h-[calc(100dvh-56px)] lg:overflow-hidden">
+    // the guarantee is intentionally relaxed. Full-width (no max-w/centering) so
+    // the tab rail hugs the left edge and the three step columns get more width.
+    <div className="flex w-full flex-col pt-3 pb-4 pl-4 pr-6 lg:h-[calc(100dvh-56px)] lg:overflow-hidden">
       <ConfigureForm initial={initial} />
     </div>
   );

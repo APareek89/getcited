@@ -570,12 +570,11 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       {/* B · Rail + panels — the left rail is primary navigation between the
           Business Context and Platform surfaces, inside the viewport frame. */}
       <div className="flex flex-1 flex-col gap-3 lg:min-h-0 lg:flex-row lg:gap-4">
-        {/* B0 · Navigation rail — a real panel: tab switcher on top, live setup
-            progress filling the rest so the whole left column reads as one
-            aligned block instead of two floating buttons. */}
+        {/* B0 · Navigation rail — a compact tab-switcher panel hugging the top-left,
+            switching between Business Context and Platform. */}
         <aside
           aria-label="Configuration sections"
-          className="flex shrink-0 flex-col gap-3 lg:w-[212px]"
+          className="flex shrink-0 flex-col gap-3 lg:w-[168px]"
         >
           <div className={cn(TIER1, "flex flex-col gap-1 p-2")}>
             {(
@@ -624,45 +623,6 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                 </button>
               );
             })}
-          </div>
-
-          {/* Setup progress — fills the rail (lg+) so it reads as one panel and
-              doubles as a live checklist mirroring the header's step dots. */}
-          <div className={cn(TIER1, "hidden flex-1 flex-col p-4 lg:flex")}>
-            <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Setup · {doneCount} of 3
-            </div>
-            <ol className="space-y-3">
-              {[
-                { label: "Brand & plan", hint: "URL + budget/team/weeks", done: steps[0] },
-                { label: "Competitors", hint: `${filledCompetitors} added`, done: steps[1] },
-                { label: "Buyer queries", hint: `${queries.length} of 30`, done: steps[2] },
-              ].map((s, i) => (
-                <li key={i} className="flex items-start gap-2.5">
-                  <span
-                    className={cn(
-                      "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-medium",
-                      s.done
-                        ? "border-transparent bg-positive/20 text-positive"
-                        : "border-white/20 text-muted-foreground/60",
-                    )}
-                  >
-                    {s.done ? <Check className="h-2.5 w-2.5" /> : i + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span
-                      className={cn("block text-sm", s.done ? "text-foreground" : "text-muted-foreground")}
-                    >
-                      {s.label}
-                    </span>
-                    <span className="block text-[11px] text-muted-foreground/70">{s.hint}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-            <p className="mt-auto flex items-center gap-1.5 pt-4 text-[11px] text-muted-foreground/70">
-              <Save className="h-3 w-3" /> ⌘/Ctrl+S to save
-            </p>
           </div>
         </aside>
 
