@@ -106,6 +106,7 @@ const handler = createMcpHandler(
         const keys = serverProviderKeys();
         const panel: PanelistId[] = ["haiku"];
         if (keys.perplexity) panel.push("perplexity");
+        if (keys.custom) panel.push("custom");
         const store = new McpGeoStore(userId, cfg?.id ?? null);
         const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys });
         const out = await runner.run({
@@ -130,6 +131,7 @@ const handler = createMcpHandler(
           your_citation_share: citations.your_citation_share,
           sentiment: { score: sentiment.sentiment_score, distribution: sentiment.distribution },
           cost_usd: out.cost_usd,
+          ...(out.panel_warning ? { panel_warning: out.panel_warning } : {}),
         });
       },
     );
@@ -179,6 +181,7 @@ const handler = createMcpHandler(
           const keys = serverProviderKeys();
           const panel: PanelistId[] = ["haiku"];
           if (keys.perplexity) panel.push("perplexity");
+          if (keys.custom) panel.push("custom");
           const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys });
           const out = await runner.run({
             brand,

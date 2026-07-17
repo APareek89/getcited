@@ -3,7 +3,7 @@
  * API keys are passed per call (never read from process.env inside the pipeline).
  */
 
-export type PanelistId = "haiku" | "gemini" | "groq" | "perplexity";
+export type PanelistId = "haiku" | "gemini" | "groq" | "perplexity" | "custom";
 
 export type Sentiment = "positive" | "neutral" | "negative";
 
@@ -17,6 +17,12 @@ export interface ProviderKeys {
   gemini?: string;
   groq?: string;
   perplexity?: string;
+  /**
+   * Custom OpenAI-compatible panelist config, stored as a single JSON blob
+   * `JSON.stringify({ baseURL, model, apiKey })` (no schema/DB change — reuses the
+   * one-secret-per-provider slot). Parsed at build time in providers.panelistModel.
+   */
+  custom?: string;
 }
 
 export interface ShareOfVoiceEntry {
@@ -54,4 +60,6 @@ export interface MeasureOutput {
   per_prompt: PerPromptEntry[];
   cost_usd: number;
   created_at: string;
+  /** Set when a panelist (e.g. a misconfigured custom model) was skipped mid-run. */
+  panel_warning?: string;
 }

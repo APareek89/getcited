@@ -35,6 +35,7 @@ export const maxDuration = 300;
 function panelFor(keys: ProviderKeys): PanelistId[] {
   const panel: PanelistId[] = ["haiku"];
   if (keys.perplexity) panel.push("perplexity");
+  if (keys.custom) panel.push("custom");
   return panel;
 }
 
@@ -42,7 +43,8 @@ async function resolveKeys(
   session: Partial<ProviderKeys> | undefined,
   mode: string | undefined,
 ): Promise<ProviderKeys> {
-  const hasSession = session && (session.anthropic || session.perplexity || session.gemini || session.groq);
+  const hasSession =
+    session && (session.anthropic || session.perplexity || session.gemini || session.groq || session.custom);
   if (hasSession) return { ...session };
   if (mode === "self_serve") return getStoredProviderKeys();
   return serverProviderKeys();
@@ -54,7 +56,9 @@ async function runBenchmark(
   cfg: ConfigView | null,
   keys: ProviderKeys,
   overrides?: { brand?: string; competitors?: string[]; queries?: string[] },
-): Promise<{ report: FullReport; brand: string; ownedDomains: string[] } | { error: string }> {
+): Promise<
+  { report: FullReport; brand: string; ownedDomains: string[]; warning?: string } | { error: string }
+> {
   const brand = overrides?.brand || cfg?.brandName || cfg?.brandUrl;
   const competitors = overrides?.competitors ?? cfg?.competitors ?? [];
   const queries = overrides?.queries ?? cfg?.queries ?? [];
@@ -74,7 +78,7 @@ async function runBenchmark(
   });
   const report = await buildReport(store, out.report_id);
   if (!report) return { error: "Benchmark ran but the report could not be loaded." };
-  return { report, brand, ownedDomains };
+  return { report, brand, ownedDomains, warning: out.panel_warning };
 }
 
 async function reportById(user: User, reportId: string): Promise<FullReport | null> {
@@ -187,6 +191,7 @@ export async function POST(req: Request) {
             top_cited_domains: citations.by_domain.slice(0, 8),
             citation_gap_count: citations.competitor_gap.length,
             sentiment: { score: sentiment.sentiment_score, distribution: sentiment.distribution },
+            ...(r.warning ? { panel_warning: r.warning } : {}),
           };
         },
       }),

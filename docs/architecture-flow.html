@@ -41,7 +41,7 @@ flowchart TD
   TRACKDB["tracker_items&lt;br/&gt;[DATA · Supabase, RLS owner-only, migration 0006]&lt;br/&gt;in: one row per roadmap action (due = plan created + week×7d)&lt;br/&gt;out: status (not_started/in_progress/done/blocked) + remarks"]:::data
   TRACKPG["/tracker page&lt;br/&gt;[FUNCTION · editable table]&lt;br/&gt;in: tracker_items of latest approved plan&lt;br/&gt;out: status dropdown + inline remarks via server action"]:::fn
 
-  PANEL["Panel run&lt;br/&gt;[AGENT · Claude/Perplexity/Gemini/Groq]&lt;br/&gt;in: prompts, per-user keys&lt;br/&gt;out: raw AI answers (real-if-key-else-mock)"]:::agent
+  PANEL["Panel run&lt;br/&gt;[AGENT · Claude/Perplexity/Gemini/Groq + optional custom OpenAI-compatible]&lt;br/&gt;in: prompts, per-user keys (Self Serve custom = base URL+model+key blob)&lt;br/&gt;out: raw AI answers (real-if-key-else-mock; broken custom skipped -&gt; panel_warning)"]:::agent
   PARSE["Parse answers&lt;br/&gt;[AGENT · Claude Haiku]&lt;br/&gt;in: raw answer + candidate brands&lt;br/&gt;out: mentions, cited_domains, sentiment"]:::agent
   SCORE["computeShareOfVoice / computeCitations&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: parsed answers&lt;br/&gt;out: SoV, citation share, per-prompt"]:::fn
   RUNDB["runs / answers / sov_history&lt;br/&gt;[DATA · Supabase]&lt;br/&gt;in: persisted answers&lt;br/&gt;out: report_id, trends"]:::data

@@ -11,6 +11,8 @@ export function serverProviderKeys(): ProviderKeys {
     gemini: process.env.GEMINI_API_KEY || undefined,
     groq: process.env.GROQ_API_KEY || undefined,
     perplexity: process.env.PERPLEXITY_API_KEY || undefined,
+    // Optional We-Serve custom panelist: a JSON blob {baseURL, model, apiKey}.
+    custom: process.env.CUSTOM_MODEL_CONFIG || undefined,
   };
 }
 
@@ -25,12 +27,14 @@ export function mergeKeys(base: ProviderKeys, override?: Partial<ProviderKeys>):
     gemini: override.gemini || base.gemini,
     groq: override.groq || base.groq,
     perplexity: override.perplexity || base.perplexity,
+    custom: override.custom || base.custom,
   };
 }
 
 /** How many panelists could run for real given these keys (for UX hints). */
 export function realPanelistCount(keys: ProviderKeys): number {
-  return [keys.anthropic, keys.gemini, keys.groq, keys.perplexity].filter(Boolean).length;
+  return [keys.anthropic, keys.gemini, keys.groq, keys.perplexity, keys.custom].filter(Boolean)
+    .length;
 }
 
 /** The panel cost cap (USD) from env, defaulting to $1.00. */

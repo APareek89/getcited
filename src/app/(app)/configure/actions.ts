@@ -186,8 +186,10 @@ export async function saveModeAction(mode: string): Promise<ActionResult<{ mode:
 }
 
 const StoreKeySchema = z.object({
-  provider: z.enum(["anthropic", "perplexity", "gemini", "groq"]),
-  key: z.string().trim().min(8).max(400),
+  // "custom" carries a JSON blob {baseURL, model, apiKey}; its max is larger to fit
+  // all three fields plus JSON overhead.
+  provider: z.enum(["anthropic", "perplexity", "gemini", "groq", "custom"]),
+  key: z.string().trim().min(8).max(2000),
 });
 
 /** Store an encrypted BYO key (opt-in). The plaintext is encrypted, never persisted raw. */
@@ -208,7 +210,7 @@ export async function storeKeyAction(
 
 export async function deleteKeyAction(provider: string): Promise<ActionResult<null>> {
   await requireUser("/configure");
-  const parsed = z.enum(["anthropic", "perplexity", "gemini", "groq"]).safeParse(provider);
+  const parsed = z.enum(["anthropic", "perplexity", "gemini", "groq", "custom"]).safeParse(provider);
   if (!parsed.success) return { ok: false, error: "Invalid provider" };
   await deleteStoredKey(parsed.data);
   revalidatePath("/configure");

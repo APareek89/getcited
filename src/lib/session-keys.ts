@@ -10,6 +10,8 @@ export interface SessionKeys {
   perplexity?: string;
   gemini?: string;
   groq?: string;
+  /** Custom OpenAI-compatible panelist, stored as a JSON blob {baseURL, model, apiKey}. */
+  custom?: string;
 }
 
 const STORAGE_KEY = "getcited_session_keys";
@@ -37,5 +39,5 @@ export function clearSessionKeys() {
 
 export function hasAnySessionKey(): boolean {
   const k = getSessionKeys();
-  return Boolean(k.anthropic || k.perplexity || k.gemini || k.groq);
+  return Boolean(k.anthropic || k.perplexity || k.gemini || k.groq || k.custom);
 }

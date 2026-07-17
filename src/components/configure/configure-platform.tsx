@@ -38,6 +38,35 @@ const CODE = "rounded bg-white/[0.07] px-1 py-0.5 font-mono text-[10px] text-for
 
 const REPO_URL = "https://github.com/APareek89/getcited";
 
+// Non-secret hint for the custom panelist so we can show "<model> configured" after a
+// remount without ever reading key material back. Holds ONLY {baseURL, model} — never
+// the apiKey. Cleared when the custom key is removed.
+const CUSTOM_HINT_KEY = "getcited_custom_hint";
+type CustomHint = { baseURL: string; model: string };
+function readCustomHint(): CustomHint | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_HINT_KEY);
+    return raw ? (JSON.parse(raw) as CustomHint) : null;
+  } catch {
+    return null;
+  }
+}
+function writeCustomHint(h: CustomHint) {
+  try {
+    window.localStorage.setItem(CUSTOM_HINT_KEY, JSON.stringify(h));
+  } catch {
+    /* non-fatal — prefill just won't survive remount */
+  }
+}
+function clearCustomHint() {
+  try {
+    window.localStorage.removeItem(CUSTOM_HINT_KEY);
+  } catch {
+    /* non-fatal */
+  }
+}
+
 const PROVIDERS: {
   id: keyof SessionKeys;
   label: string;
@@ -216,12 +245,41 @@ export function ConfigurePlatform({
   const [storage, setStorage] = useState<"session" | "server">("session");
   const [savingRow, setSavingRow] = useState<string | null>(null);
   const [modePulse, setModePulse] = useState(0);
+  // Custom OpenAI-compatible panelist: three visible inputs assembled into one JSON
+  // blob and saved under provider "custom". The apiKey is never read back, so once
+  // configured we only prefill baseURL + model (persisted alongside, non-secret).
+  const [custom, setCustom] = useState({ baseURL: "", model: "", apiKey: "" });
+  const [savingCustom, setSavingCustom] = useState(false);
 
   useEffect(() => {
     // sessionStorage is client-only, so this read must happen after mount.
+    const s = getSessionKeys();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSession(getSessionKeys());
+    setSession(s);
     listStoredKeysAction().then((r) => r.ok && setStored(r.data));
+    // Prefill custom baseURL + model (NOT the key). Prefer the readable session blob;
+    // fall back to the non-secret hint left by a previous encrypted save.
+    let baseURL = "";
+    let model = "";
+    if (s.custom) {
+      try {
+        const parsed = JSON.parse(s.custom) as { baseURL?: string; model?: string };
+        baseURL = parsed.baseURL ?? "";
+        model = parsed.model ?? "";
+      } catch {
+        /* ignore a malformed blob */
+      }
+    }
+    if (!baseURL && !model) {
+      const hint = readCustomHint();
+      if (hint) {
+        baseURL = hint.baseURL;
+        model = hint.model;
+      }
+    }
+    if (baseURL || model) {
+      setCustom((c) => ({ ...c, baseURL, model }));
+    }
   }, []);
 
   const configuredCount = PROVIDERS.filter(
@@ -276,6 +334,66 @@ export function ConfigurePlatform({
       }
       setStored((p) => p.filter((x) => x !== id));
     });
+  }
+
+  // Whether a custom panelist is configured (session blob OR encrypted store).
+  const customSession = Boolean(session.custom);
+  const customStored = stored.includes("custom");
+  const customConfigured = customSession || customStored;
+
+  /**
+   * Save the three custom fields as one JSON blob under provider "custom", routing on
+   * the same session/encrypted storage choice as the key rows. The non-secret
+   * {baseURL, model} hint is persisted so we can show "<model> configured" later
+   * without ever reading the key back.
+   */
+  function saveCustom() {
+    const baseURL = custom.baseURL.trim();
+    const model = custom.model.trim();
+    const apiKey = custom.apiKey.trim();
+    if (!baseURL || !model || !apiKey) {
+      toast.error("Enter base URL, model id, and API key for the custom model.");
+      return;
+    }
+    const blob = JSON.stringify({ baseURL, model, apiKey });
+    writeCustomHint({ baseURL, model });
+    if (storage === "session") {
+      setSessionKey("custom", blob);
+      setSession(getSessionKeys());
+      setCustom((c) => ({ ...c, apiKey: "" })); // never keep the key in state
+      return;
+    }
+    setSavingCustom(true);
+    startTransition(async () => {
+      const res = await storeKeyAction({ provider: "custom" as never, key: blob });
+      setSavingCustom(false);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setStored((p) => Array.from(new Set([...p, "custom"])));
+      setCustom((c) => ({ ...c, apiKey: "" }));
+    });
+  }
+
+  /** Remove the custom panelist from both session and encrypted store. */
+  function removeCustom() {
+    clearCustomHint();
+    if (session.custom) {
+      setSessionKey("custom", "");
+      setSession(getSessionKeys());
+    }
+    setCustom({ baseURL: "", model: "", apiKey: "" });
+    if (stored.includes("custom")) {
+      startTransition(async () => {
+        const res = await deleteKeyAction("custom");
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        setStored((p) => p.filter((x) => x !== "custom"));
+      });
+    }
   }
 
   const selfServe = mode === "self_serve";
@@ -482,6 +600,95 @@ export function ConfigurePlatform({
               })}
             </div>
 
+            {/* Custom OpenAI-compatible panelist — three fields → one JSON blob saved
+                under provider "custom" (session or encrypted, same routing as above). */}
+            <div className={cn(TIER2, "flex flex-col gap-2.5 p-3")}>
+              <div className="flex h-5 min-w-0 items-center gap-1.5">
+                {customConfigured && (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      customStored ? "bg-[#22D3EE]" : "bg-positive",
+                    )}
+                  />
+                )}
+                <span className="truncate text-xs font-medium">Custom model (OpenAI-compatible)</span>
+                {customSession && (
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-1.5 text-[9px] uppercase text-muted-foreground">
+                    session
+                  </span>
+                )}
+                {customStored && (
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-1.5 text-[9px] uppercase text-muted-foreground">
+                    stored
+                  </span>
+                )}
+                {customConfigured && (
+                  <button
+                    type="button"
+                    onClick={removeCustom}
+                    aria-label="Remove custom model"
+                    className="ml-auto text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              {customConfigured && (
+                <p className="text-[10px] text-muted-foreground/80">
+                  {custom.model
+                    ? `${custom.model} configured — runs as an extra panelist.`
+                    : "Custom model configured — runs as an extra panelist."}
+                </p>
+              )}
+
+              <Input
+                value={custom.baseURL}
+                placeholder="Base URL — e.g. https://openrouter.ai/api/v1"
+                aria-label="Custom model base URL"
+                onChange={(e) => setCustom((c) => ({ ...c, baseURL: e.target.value }))}
+                className="h-8 rounded-lg border-white/10 bg-white/5 text-xs"
+              />
+              <Input
+                value={custom.model}
+                placeholder="Model ID — e.g. openai/gpt-4o-mini"
+                aria-label="Custom model id"
+                onChange={(e) => setCustom((c) => ({ ...c, model: e.target.value }))}
+                className="h-8 rounded-lg border-white/10 bg-white/5 text-xs"
+              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="password"
+                  value={custom.apiKey}
+                  placeholder={customConfigured ? "API key — re-enter to update" : "API key"}
+                  aria-label="Custom model API key"
+                  onChange={(e) => setCustom((c) => ({ ...c, apiKey: e.target.value }))}
+                  className="h-8 flex-1 rounded-lg border-white/10 bg-white/5 text-xs"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={
+                    !custom.baseURL.trim() ||
+                    !custom.model.trim() ||
+                    !custom.apiKey.trim() ||
+                    savingCustom
+                  }
+                  onClick={saveCustom}
+                >
+                  {savingCustom ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
+                </Button>
+              </div>
+              <p className="text-[10px] leading-snug text-muted-foreground/70">
+                Works with OpenRouter, OpenAI, Together, Fireworks, DeepSeek, local
+                Ollama/LM Studio. Used as an extra panelist; parsing &amp; scoring stay on Claude.
+              </p>
+            </div>
+
             <Button
               type="button"
               variant="ghost"
@@ -490,6 +697,8 @@ export function ConfigurePlatform({
               onClick={() => {
                 clearSessionKeys();
                 setSession({});
+                setCustom({ baseURL: "", model: "", apiKey: "" });
+                clearCustomHint();
               }}
             >
               Clear session keys

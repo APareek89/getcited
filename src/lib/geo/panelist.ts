@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import type { PanelistId, ProviderKeys } from "./types";
-import { panelistModel } from "./providers";
+import { panelistModel, parseCustomConfig } from "./providers";
 import { PANELIST_MODELS } from "./models";
 
 export interface TokenUsage {
@@ -34,7 +34,12 @@ function normalizeUsage(u: { inputTokens?: number; outputTokens?: number } | und
 
 /** Real panelist backed by a provider, built from per-call keys. */
 export function createRealPanelist(id: PanelistId, keys: ProviderKeys): Panelist {
-  const { modelId } = PANELIST_MODELS[id];
+  // The custom panelist has no static registry modelId — derive its display/cost id
+  // from the user's config blob so reports show the real model (not an empty string).
+  const modelId =
+    id === "custom" && keys.custom
+      ? parseCustomConfig(keys.custom).model
+      : PANELIST_MODELS[id].modelId;
   return {
     id,
     modelId,

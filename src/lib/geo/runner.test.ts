@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { InProcessPanelRunner } from "./runner";
+import { InProcessPanelRunner, customSkipWarning } from "./runner";
 import { MemoryGeoStore } from "./memory-store";
 import { buildReport } from "./report";
 
@@ -51,5 +51,43 @@ describe("InProcessPanelRunner (mock mode, no keys)", () => {
     await expect(
       runner.run({ brand: "X", competitors: ["Y"], prompts, panel: ["haiku"], runs: 5 }),
     ).rejects.toThrow(/Workload too large/);
+  });
+
+  it("a broken custom model is skipped (not fatal) and surfaces a panel_warning", async () => {
+    const store = new MemoryGeoStore();
+    // keys.custom is present (so custom is treated as REAL, not mock) but malformed,
+    // so building the custom panelist throws. haiku has no key → mock. The run must
+    // complete on the built-in panel and report the skip, never crash.
+    const runner = new InProcessPanelRunner(store, {
+      costCapUsd: 1.0,
+      keys: { custom: "not-valid-json" },
+    });
+    const out = await runner.run({
+      brand: "Acme",
+      competitors: ["Rival"],
+      prompt_set_id: "demo",
+      panel: ["haiku", "custom"],
+    });
+    expect(out.status).toBe("completed");
+    expect(out.panel_warning).toMatch(/custom model skipped/i);
+    // Only haiku (mock) produced answers — the broken custom contributed none.
+    expect(out.answer_count).toBe(4);
+  });
+
+  it("customSkipWarning redacts the key even when the endpoint reflects it (reviewer repro)", () => {
+    const SECRET = "sk-SUPER-SECRET-abc123XYZ";
+    const blob = JSON.stringify({ baseURL: "https://evil.example/v1", model: "x", apiKey: SECRET });
+    // The exact leak the security review reproduced: a hostile endpoint echoing the
+    // Authorization header into its error body.
+    const w = customSkipWarning(
+      new Error(`boom (seen auth: Bearer ${SECRET})`),
+      blob,
+    );
+    expect(w).toMatch(/custom model skipped/i);
+    expect(w).not.toContain(SECRET);
+    expect(w).toContain("***");
+    // Bearer scrub still fires when the blob can't be parsed for the exact key.
+    const w2 = customSkipWarning(new Error(`nope: Bearer ${SECRET}`), "not-json");
+    expect(w2).not.toContain(SECRET);
   });
 });

@@ -27,7 +27,7 @@ flowchart TD
   TRACKDB["tracker_items<br/>[DATA · Supabase, RLS owner-only, migration 0006]<br/>in: one row per roadmap action (due = plan created + week×7d)<br/>out: status (not_started/in_progress/done/blocked) + remarks"]:::data
   TRACKPG["/tracker page<br/>[FUNCTION · editable table]<br/>in: tracker_items of latest approved plan<br/>out: status dropdown + inline remarks via server action"]:::fn
 
-  PANEL["Panel run<br/>[AGENT · Claude/Perplexity/Gemini/Groq]<br/>in: prompts, per-user keys<br/>out: raw AI answers (real-if-key-else-mock)"]:::agent
+  PANEL["Panel run<br/>[AGENT · Claude/Perplexity/Gemini/Groq + optional custom OpenAI-compatible]<br/>in: prompts, per-user keys (Self Serve custom = base URL+model+key blob)<br/>out: raw AI answers (real-if-key-else-mock; broken custom skipped -> panel_warning)"]:::agent
   PARSE["Parse answers<br/>[AGENT · Claude Haiku]<br/>in: raw answer + candidate brands<br/>out: mentions, cited_domains, sentiment"]:::agent
   SCORE["computeShareOfVoice / computeCitations<br/>[FUNCTION]<br/>in: parsed answers<br/>out: SoV, citation share, per-prompt"]:::fn
   RUNDB["runs / answers / sov_history<br/>[DATA · Supabase]<br/>in: persisted answers<br/>out: report_id, trends"]:::data

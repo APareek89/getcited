@@ -3,8 +3,12 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import type { ProviderKeys } from "@/lib/geo/types";
 
-export type KeyProvider = "anthropic" | "perplexity" | "gemini" | "groq";
-export const KEY_PROVIDERS: KeyProvider[] = ["anthropic", "perplexity", "gemini", "groq"];
+// "custom" holds an opaque JSON blob {baseURL, model, apiKey} for the OpenAI-compatible
+// panelist — the provider column is free text, so no schema change is needed. The
+// store/get/delete/list paths treat every value as an opaque string, so the blob
+// flows through the AES-GCM encrypt/decrypt path unchanged.
+export type KeyProvider = "anthropic" | "perplexity" | "gemini" | "groq" | "custom";
+export const KEY_PROVIDERS: KeyProvider[] = ["anthropic", "perplexity", "gemini", "groq", "custom"];
 
 /** Store (or replace) an encrypted BYO key for a provider. Plaintext never persisted. */
 export async function storeEncryptedKey(

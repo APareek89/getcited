@@ -74,6 +74,28 @@ $0.0085), live AI suggest/generate in new UI, build_plan→roadmap WHAT/WHY/HOW/
    the silent {weeks:[]} swallow that shipped the user's thin PDF is gone.
 5. Master flow .mmd + architecture-flow.html viewer synced (Configure tabs, 3 approve paths, DASH node).
 
+## Round 4 (2026-07-17 late, user-directed) — ✅ SHIPPED
+1. **Configure layout**: tabs hug far-left (full-width page, `pl-4`, no max-w/centering), steps-
+   completed panel removed, rail 212→168px, three Business Context columns widened.
+2. **Plan PDF polish**: roadmap action-table column padding (Hrs/Owner no longer collide). Verified
+   on a live Fynd run (10-page PDF, per-week WHAT/WHY/HOW/owner/hours/dates all clean).
+3. **Custom LLM (OpenAI-compatible)** — Self Serve can add ONE custom model (base URL + model id +
+   key) as an EXTRA panelist via `@ai-sdk/openai-compatible`. Stored as a JSON blob
+   `{baseURL,model,apiKey}` under a new free-text `custom` provider slot (session=sessionStorage,
+   stored=AES-GCM api_keys row) — NO migration. Parsing/scoring/roadmap stay on Anthropic. Panel
+   appends `custom` when `keys.custom` present (chat panelFor + both MCP arrays); resolveKeys
+   hasSession includes custom; realPanelistCount counts it. **Robustness (runner.ts):** a
+   misconfigured custom endpoint degrades gracefully — dropped at BUILD (bad blob) or CALL time with
+   a `panel_warning`, never crashing the run (built-in "haiku" always present so answers still land);
+   built-in panelist failures stay fatal. Surfaced via `MeasureOutput.panel_warning` → MCP
+   run_benchmark + chat run_benchmark tool. Regression test in runner.test.ts (39 tests). Custom
+   modelId not in MODEL_PRICING → $0 cost-cap contribution (REAL_CALL_COST_ESTIMATE still gates).
+   NOTE: a real custom-endpoint round-trip was NOT live-tested (no OpenAI-compatible key on hand) —
+   degradation + happy-path (built-ins) are verified; the actual custom call is verified by
+   construction (standard AI SDK provider).
+   **Fynd example** saved to ~/Downloads/getcited-fynd-example/ (PDF + dashboard + tracker PNGs);
+   QA data lives under qa-harness@getcited.local, not the user's own account.
+
 ## Next session — pending points (2026-07-17)
 0. **User validates live** (all auth-gated): round-2 UI fixes (nav-left, header bleed on /dashboard,
    Configure 2-col no-scroll, chat width) + full Tracker flow: build plan → agent asks approval →

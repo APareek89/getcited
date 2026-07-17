@@ -1,6 +1,6 @@
 import type { PanelistId, ProviderKeys } from "./types";
 
-export type Provider = "anthropic" | "google" | "groq" | "perplexity";
+export type Provider = "anthropic" | "google" | "groq" | "perplexity" | "custom";
 
 export interface PanelistModel {
   provider: Provider;
@@ -40,6 +40,15 @@ export const PANELIST_MODELS: Record<PanelistId, PanelistModel> = {
     label: "Perplexity Sonar",
     keyField: "perplexity",
   },
+  custom: {
+    provider: "custom",
+    // modelId is dynamic for the custom panelist: the real model id is read from the
+    // JSON blob (keys.custom → { baseURL, model, apiKey }) at build time in
+    // providers.panelistModel. This registry value is intentionally unused.
+    modelId: "",
+    label: "Custom model",
+    keyField: "custom",
+  },
 };
 
 /** Parser/scorer + hallucination checker model (always Anthropic Haiku). */
@@ -55,6 +64,9 @@ export const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: numb
   "gemini-2.0-flash": { inputPerM: 0.1, outputPerM: 0.4 },
   "llama-3.3-70b-versatile": { inputPerM: 0.59, outputPerM: 0.79 },
   sonar: { inputPerM: 1.0, outputPerM: 1.0 },
+  // NOTE: the custom OpenAI-compatible panelist has no entry here — its model id is
+  // user-supplied and unknown, so CostMeter treats it as $0 and it never counts
+  // toward the per-run cost cap. Accepted tradeoff for a BYO panelist.
 };
 
 /** Rough per-call cost estimate (USD) used to abort BEFORE spending near the cap. */

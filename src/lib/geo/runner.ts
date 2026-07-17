@@ -109,11 +109,27 @@ export class InProcessPanelRunner implements PanelRunner {
     const { runId } = await this.store.beginRun(beginRunParams(input, panel));
 
     try {
-      const panelists = panel.map((id) =>
-        isMock(id)
-          ? createMockPanelist(id, input.brand, input.competitors)
-          : createRealPanelist(id as PanelistId, keys),
-      );
+      // A user-configured custom endpoint is far likelier to be misconfigured than
+      // our built-in providers. Its failures (at BUILD or CALL time) degrade
+      // gracefully — drop the custom panelist and keep the built-in panel running,
+      // never failing the whole benchmark. Built-in panelist failures stay fatal.
+      const panelWarnings: string[] = [];
+      let customDisabled = false;
+      const panelists = panel
+        .map((id) => {
+          if (isMock(id)) return createMockPanelist(id, input.brand, input.competitors);
+          try {
+            return createRealPanelist(id as PanelistId, keys);
+          } catch (err) {
+            if (id === "custom") {
+              panelWarnings.push(customSkipWarning(err, keys.custom));
+              customDisabled = true;
+              return null;
+            }
+            throw err;
+          }
+        })
+        .filter((p): p is Panelist => p !== null);
       const parser: Parser = parserMock
         ? createDeterministicParser()
         : createAnthropicParser(keys.anthropic!);
@@ -125,6 +141,7 @@ export class InProcessPanelRunner implements PanelRunner {
       for (const prompt of prompts) {
         for (let r = 0; r < runs; r++) {
           for (const panelist of panelists) {
+            if (panelist.id === "custom" && customDisabled) continue;
             if (meter.wouldExceed(estimatePerCall * 2)) {
               throw new PanelRunError(
                 `Cost cap of $${this.opts.costCapUsd.toFixed(2)} would be exceeded; ` +
@@ -132,7 +149,19 @@ export class InProcessPanelRunner implements PanelRunner {
                 "cost_cap_exceeded",
               );
             }
-            const answer = await this.callPanelist(panelist, prompt);
+            let answer;
+            try {
+              answer = await this.callPanelist(panelist, prompt);
+            } catch (err) {
+              // Custom endpoint failed mid-run: disable it and continue with the
+              // built-in panel (built-in failures still propagate as fatal).
+              if (panelist.id === "custom") {
+                customDisabled = true;
+                panelWarnings.push(customSkipWarning(err, keys.custom));
+                continue;
+              }
+              throw err;
+            }
             meter.add(answer.model, answer.usage);
             const parsed = await this.callParser(parser, answer.text, input);
             meter.add(PARSER_MODEL_ID, parsed.usage);
@@ -186,6 +215,7 @@ export class InProcessPanelRunner implements PanelRunner {
         per_prompt: scored.perPrompt,
         cost_usd: round4(meter.total),
         created_at: new Date().toISOString(),
+        ...(panelWarnings.length ? { panel_warning: panelWarnings[0] } : {}),
       };
     } catch (err) {
       const message =
@@ -231,4 +261,25 @@ function round4(n: number): number {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Build the user-facing "custom model skipped" warning WITHOUT leaking the key.
+ * @ai-sdk/openai-compatible surfaces the upstream endpoint's raw error body as the
+ * exception message, and the base URL is user-controlled — a reflecting/hostile
+ * endpoint can echo the `Authorization: Bearer <key>` header back. We know the exact
+ * key (from the blob), so redact it verbatim, then belt-and-suspenders strip any
+ * Bearer/sk- token. The blob may be unparseable at build time; that path's message
+ * (from parseCustomConfig) never contains the blob, so it's safe.
+ */
+export function customSkipWarning(err: unknown, customBlob: string | undefined): string {
+  let msg = errorMessage(err);
+  try {
+    const key = (JSON.parse(customBlob ?? "{}") as { apiKey?: unknown }).apiKey;
+    if (typeof key === "string" && key.length >= 4) msg = msg.split(key).join("***");
+  } catch {
+    // blob wasn't JSON — parseCustomConfig's message doesn't include it; nothing to redact
+  }
+  msg = msg.replace(/Bearer\s+[\w.\-]+/gi, "Bearer ***").replace(/sk-[A-Za-z0-9\-_]{6,}/g, "sk-***");
+  return `Custom model skipped: ${msg}`;
 }
