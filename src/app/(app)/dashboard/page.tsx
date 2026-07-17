@@ -115,8 +115,8 @@ export default async function DashboardPage() {
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                     <div
-                      className="h-full rounded-full"
-                      style={{ width: pct(e.sov), background: isBrand ? "#635BFF" : "#3A414B" }}
+                      className={isBrand ? "h-full rounded-full bg-aurora" : "h-full rounded-full"}
+                      style={{ width: pct(e.sov), ...(isBrand ? {} : { background: "rgba(255,255,255,0.14)" }) }}
                     />
                   </div>
                 </div>

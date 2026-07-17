@@ -134,10 +134,10 @@ export function MockAudit() {
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
                   <div
-                    className="h-full rounded-full transition-all"
+                    className={d.isBrand ? "h-full rounded-full bg-aurora transition-all" : "h-full rounded-full transition-all"}
                     style={{
                       width: `${d.pct}%`,
-                      background: d.isBrand ? "#635BFF" : "#3A414B",
+                      ...(d.isBrand ? {} : { background: "rgba(255,255,255,0.14)" }),
                     }}
                   />
                 </div>

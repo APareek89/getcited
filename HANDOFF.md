@@ -20,9 +20,17 @@ frosted glass cards (rgba(255,255,255,.05) + blur(20px) + 1px rgba(255,255,255,.
 text #EDF0F7 / muted #93A0B4, gradient accent for buttons/active pills/chart strokes. Reference mockups:
 `~/.gstack/projects/APareek89-getcited/designs/{landing,configure,assistant,dashboard}-20260717/variant-C.png`
 (+ HTML sources /tmp/gcC-*.html, /tmp/gc-configure-C.html — copy into repo before /tmp is cleared).
-NOT yet applied to app code (user constraint during exploration).
+**APPLIED to the app (2026-07-17)** — globals.css tokens + aurora glows on body + glass on all
+shadcn Cards + `.bg-aurora`/`.text-aurora`/`.glass` utilities; gradient accents on hero/CTA/active
+nav/SoV "you" bars/trend line. **Nav IA changed the same day:** left sidebar → TOP nav bar
+(`app-shell.tsx`): Configure · GEO Agent (/assistant) · **GEO MCP (/mcp — new page, MCP panel moved
+out of the assistant tabs)** · Dashboard. Assistant no longer has an Agent/MCP tab switcher.
+`/mcp` added to PROTECTED_PREFIXES. Also fixed missing `--color-danger` mapping (text-danger classes
+were silently no-oping).
 
 ## Next session — pending points (2026-07-17)
+0. **User validates the Aurora Glass re-theme + top nav live** (sign in; check Configure/GEO Agent/
+   GEO MCP/Dashboard render well as glass; report any contrast/spacing misses — mockup refs in docs/design-refs/).
 1. **User validates v1.1 live**: re-save Configure (old competitors are URLs → hit "Suggest competitors",
    set real budget/team), run "How can I improve?" card, check roadmap + PDF, try generate_content + upload.
 2. **Loop offer is OPEN** (Loop.MD status: offered) — ask once: turn the eval loop on?

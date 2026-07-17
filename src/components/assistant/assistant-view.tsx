@@ -10,8 +10,6 @@ import {
   Target,
   LineChart,
   Compass,
-  Bot,
-  Plug,
   Sparkles,
   Paperclip,
   Download,
@@ -23,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ToolCallCard } from "./tool-call-card";
-import { McpPanel } from "./mcp-panel";
 import { Markdown } from "./markdown";
 import { ThreadSidebar, type ThreadItem } from "./thread-sidebar";
 import { getSessionKeys } from "@/lib/session-keys";
@@ -81,7 +78,6 @@ const MAX_UPLOAD_BYTES = 120_000;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function AssistantView() {
-  const [tab, setTab] = useState<"agent" | "mcp">("agent");
   const [model, setModel] = useState(AGENT_MODELS[1]!.id);
   const [input, setInput] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -242,36 +238,17 @@ export function AssistantView() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] md:h-screen">
-      {tab === "agent" && (
-        <ThreadSidebar
-          threads={threads}
-          activeId={threadId}
-          onSelect={openThread}
-          onNew={newThread}
-          onDelete={deleteThreadById}
-        />
-      )}
+    <div className="flex h-[calc(100vh-3.5rem)]">
+      <ThreadSidebar
+        threads={threads}
+        activeId={threadId}
+        onSelect={openThread}
+        onNew={newThread}
+        onDelete={deleteThreadById}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Tab header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
-            <TabButton active={tab === "agent"} onClick={() => setTab("agent")} icon={Bot}>
-              Agent Mode
-            </TabButton>
-            <TabButton active={tab === "mcp"} onClick={() => setTab("mcp")} icon={Plug}>
-              MCP
-            </TabButton>
-          </div>
-        </div>
-
-        {tab === "mcp" ? (
-          <div className="min-h-0 flex-1 overflow-auto">
-            <McpPanel />
-          </div>
-        ) : (
-          <>
+        <>
             {/* Messages */}
             <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
               <div className="mx-auto max-w-2xl space-y-5">
@@ -435,36 +412,10 @@ export function AssistantView() {
                 </p>
               </div>
             </div>
-          </>
-        )}
+        </>
       </div>
     </div>
   );
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-function TabButton({
-  active,
-  onClick,
-  icon: Icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ElementType;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
-        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {children}
-    </button>
-  );
-}

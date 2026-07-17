@@ -24,8 +24,8 @@ export default async function Home() {
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
-              <Sparkles className="h-4 w-4 text-primary" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-aurora">
+              <Sparkles className="h-4 w-4 text-white" />
             </div>
             <span className="font-semibold tracking-tight">GetCited</span>
           </Link>
@@ -57,7 +57,7 @@ export default async function Home() {
           </div>
           <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
             Get cited by AI.{" "}
-            <span className="text-primary">Know exactly what to do.</span>
+            <span className="text-aurora">Know exactly what to do.</span>
           </h1>
           <p className="mt-4 max-w-lg text-pretty text-base text-muted-foreground sm:text-lg">
             GetCited measures whether AI assistants recommend your brand, then turns it
@@ -65,7 +65,7 @@ export default async function Home() {
             grounded in how competitors are actually cited, not vibes.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <ButtonLink size="lg" href={primaryHref}>
+            <ButtonLink size="lg" href={primaryHref} className="bg-aurora border-0 text-white hover:opacity-90">
               {primaryLabel} <ArrowRight className="h-4 w-4" />
             </ButtonLink>
             <span className="text-sm text-muted-foreground">
