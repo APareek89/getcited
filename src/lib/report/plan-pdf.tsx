@@ -146,14 +146,14 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
                 Week {w.week} · {pdfSafe(fmtWeekRange(plan.createdAt, w.week))} — {pdfSafe(w.theme)}
               </Text>
               <View style={s.row}>
-                <Text style={[s.th, { width: "44%" }]}>Action (what · why · how)</Text>
-                <Text style={[s.th, { width: "18%" }]}>Owner</Text>
-                <Text style={[s.th, { width: "8%", textAlign: "right" }]}>Hrs</Text>
+                <Text style={[s.th, { width: "43%", paddingRight: 6 }]}>Action (what · why · how)</Text>
+                <Text style={[s.th, { width: "19%", paddingRight: 6 }]}>Owner</Text>
+                <Text style={[s.th, { width: "8%", textAlign: "right", paddingRight: 6 }]}>Hrs</Text>
                 <Text style={[s.th, { width: "30%" }]}>Deliverable</Text>
               </View>
               {w.actions.map((a, i) => (
                 <View style={s.row} key={i}>
-                  <View style={{ width: "44%" }}>
+                  <View style={{ width: "43%", paddingRight: 6 }}>
                     <Text>{pdfSafe(a.action)}</Text>
                     {a.why ? <Text style={[s.li, { marginTop: 2 }]}>Why: {pdfSafe(a.why)}</Text> : null}
                     {(a.how?.length ?? 0) > 0 ? (
@@ -166,8 +166,8 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
                       </View>
                     ) : null}
                   </View>
-                  <Text style={[s.muted, { width: "18%" }]}>{pdfSafe(a.owner_role)}</Text>
-                  <Text style={[s.muted, { width: "8%", textAlign: "right" }]}>{Math.round(a.hours)}</Text>
+                  <Text style={[s.muted, { width: "19%", paddingRight: 6 }]}>{pdfSafe(a.owner_role)}</Text>
+                  <Text style={[s.muted, { width: "8%", textAlign: "right", paddingRight: 6 }]}>{Math.round(a.hours)}</Text>
                   <Text style={[s.muted, { width: "30%" }]}>{pdfSafe(a.deliverable)}</Text>
                 </View>
               ))}
