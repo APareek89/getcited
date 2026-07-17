@@ -24,7 +24,8 @@ import {
 import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
 import { getStoredProviderKeys } from "@/lib/db/api-keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
-import { generateRoadmap } from "@/lib/geo/roadmap";
+import { generateRoadmap, type RoadmapDoc } from "@/lib/geo/roadmap";
+import { isoDate, weekDueDate } from "@/lib/geo/schedule";
 import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 import { AGENT_SYSTEM_PROMPT, DEFAULT_AGENT_MODEL, isAgentModel } from "@/lib/geo/agent";
 
@@ -256,8 +257,8 @@ export async function POST(req: Request) {
             grounding: { crawl: dx.crawlGrounded },
           });
 
-          // Week-by-week roadmap (manager-shareable detail).
-          let roadmap: unknown[] = [];
+          // Week-by-week roadmap (manager-shareable detail: WHAT/WHY/HOW/WHO + guidelines).
+          let roadmap: RoadmapDoc = { weeks: [], guidelines: [] };
           try {
             roadmap = await generateRoadmap({
               anthropicKey: keys.anthropic!,
@@ -269,7 +270,7 @@ export async function POST(req: Request) {
               teamSize: team,
             });
           } catch {
-            roadmap = [];
+            roadmap = { weeks: [], guidelines: [] };
           }
 
           const saved = await savePlan({
@@ -287,6 +288,8 @@ export async function POST(req: Request) {
               ? "NOTE: budget/team capacity is very low — only free, low-effort tactics fit. Suggest the user raise budget or team size in Configure for a stronger plan."
               : undefined;
 
+          // Trimmed for chat: the card shows a summary; full WHY/HOW detail lives in
+          // the downloadable document (?format=docx|pdf|xlsx|html) — don't re-stream it.
           return {
             plan_id: saved.id,
             report_id: report.report_id,
@@ -298,7 +301,14 @@ export async function POST(req: Request) {
             spent_hours: allocation.spentHours,
             tactics: allocation.tactics,
             projection,
-            roadmap,
+            roadmap_overview: roadmap.weeks.map((w) => ({
+              week: w.week,
+              theme: w.theme,
+              kpi_checkpoint: w.kpi_checkpoint,
+              due_date: isoDate(weekDueDate(saved.createdAt, w.week)),
+              action_count: w.actions.length,
+            })),
+            execution_guidelines: roadmap.guidelines,
             gap: dx.gap,
             capacity_note: capacityNote,
           };

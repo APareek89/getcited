@@ -9,14 +9,15 @@ export interface SavePlanInput {
   runId: string | null;
   tactics: ChosenTactic[];
   projection: Projection;
-  roadmap?: unknown[] | null;
+  /** Legacy plans store RoadmapWeek[]; current ones store {weeks, guidelines}. */
+  roadmap?: unknown | null;
 }
 
 export interface PlanView {
   id: string;
   tactics: ChosenTactic[];
   projection: Projection | null;
-  roadmap: unknown[] | null;
+  roadmap: unknown | null;
   targetCitationShare: number | null;
   timelineWeeks: number | null;
   confidence: string | null;
@@ -29,7 +30,7 @@ function mapPlan(r: any): PlanView {
     id: r.id,
     tactics: (r.tactics ?? []) as ChosenTactic[],
     projection: (r.projection ?? null) as Projection | null,
-    roadmap: (r.roadmap ?? null) as unknown[] | null,
+    roadmap: (r.roadmap ?? null) as unknown | null,
     targetCitationShare: r.target_citation_share,
     timelineWeeks: r.timeline_weeks,
     confidence: r.confidence,

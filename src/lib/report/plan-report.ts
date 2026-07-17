@@ -2,11 +2,7 @@ import "server-only";
 import ExcelJS from "exceljs";
 import type { PlanView } from "@/lib/db/plans";
 import type { ConfigView } from "@/lib/db/configs";
-import type { RoadmapWeek } from "@/lib/geo/roadmap";
-
-function roadmapOf(plan: PlanView): RoadmapWeek[] {
-  return Array.isArray(plan.roadmap) ? (plan.roadmap as RoadmapWeek[]) : [];
-}
+import { normalizeRoadmap, fmtWeekRange, weekDueDate, isoDate } from "@/lib/geo/schedule";
 
 function pct(n: number | null | undefined) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
@@ -31,14 +27,23 @@ export function buildPlanHtml(plan: PlanView, cfg: ConfigView | null): string {
     )
     .join("");
   const assumptions = (p?.assumptions ?? []).map((a) => `<li>${esc(a)}</li>`).join("");
-  const weeks = roadmapOf(plan);
-  const roadmapHtml = weeks.length
-    ? `<div class="card"><strong>Week-by-week roadmap</strong>${weeks
+  const roadmap = normalizeRoadmap(plan.roadmap);
+  const guidelinesHtml = roadmap.guidelines.length
+    ? `<div class="card"><strong>How to run this plan</strong><ul style="margin-top:8px">${roadmap.guidelines
+        .map((g) => `<li style="font-size:13px;color:var(--text)">${esc(g)}</li>`)
+        .join("")}</ul></div>`
+    : "";
+  const roadmapHtml = roadmap.weeks.length
+    ? `<div class="card"><strong>Week-by-week roadmap</strong>${roadmap.weeks
         .map(
-          (w) => `<div style="margin-top:14px"><div style="font-weight:600">Week ${w.week} — ${esc(w.theme)}</div>
+          (w) => `<div style="margin-top:14px"><div style="font-weight:600">Week ${w.week} · ${esc(fmtWeekRange(plan.createdAt, w.week))} — ${esc(w.theme)}</div>
     <table style="margin-top:6px"><thead><tr><th>Action</th><th>Owner</th><th class="num">Hrs</th><th>Deliverable</th></tr></thead><tbody>${w.actions
       .map(
-        (a) => `<tr><td>${esc(a.action)}</td><td class="num">${esc(a.owner_role)}</td><td class="num">${Math.round(a.hours)}</td><td class="num">${esc(a.deliverable)}</td></tr>`,
+        (a) => `<tr><td>${esc(a.action)}${a.why ? `<div class="muted" style="font-size:11px;margin-top:2px">Why: ${esc(a.why)}</div>` : ""}${
+          a.how?.length
+            ? `<ol style="margin:4px 0 0;padding-left:16px">${a.how.map((s) => `<li style="font-size:11px;color:var(--muted)">${esc(s)}</li>`).join("")}</ol>`
+            : ""
+        }</td><td class="num">${esc(a.owner_role)}</td><td class="num">${Math.round(a.hours)}</td><td class="num">${esc(a.deliverable)}</td></tr>`,
       )
       .join("")}</tbody></table>
     <div class="muted" style="font-size:12px;margin-top:4px">KPI checkpoint: ${esc(w.kpi_checkpoint)}</div></div>`,
@@ -87,6 +92,8 @@ ul{margin:8px 0 0;padding-left:18px}li{margin:3px 0;font-size:12px;color:var(--m
   <tbody>${tacticRows}</tbody></table>
 </div>
 
+${guidelinesHtml}
+
 ${roadmapHtml}
 
 <div class="warn">
@@ -132,24 +139,45 @@ export async function buildPlanWorkbook(plan: PlanView, cfg: ConfigView | null):
   }
   tac.getRow(1).font = { bold: true };
 
-  const weeks = roadmapOf(plan);
-  if (weeks.length) {
+  const roadmap = normalizeRoadmap(plan.roadmap);
+  if (roadmap.weeks.length) {
     const rm = wb.addWorksheet("Roadmap");
     rm.columns = [
       { header: "Week", width: 7 },
-      { header: "Theme", width: 30 },
-      { header: "Action", width: 52 },
-      { header: "Owner", width: 20 },
+      { header: "Due date", width: 12 },
+      { header: "Theme", width: 26 },
+      { header: "Action (WHAT)", width: 44 },
+      { header: "Why", width: 44 },
+      { header: "How (steps)", width: 60 },
+      { header: "Owner (WHO)", width: 20 },
       { header: "Hours", width: 8 },
-      { header: "Deliverable", width: 40 },
-      { header: "KPI checkpoint", width: 36 },
+      { header: "Deliverable", width: 36 },
+      { header: "KPI checkpoint", width: 32 },
     ];
-    for (const w of weeks) {
+    for (const w of roadmap.weeks) {
       for (const a of w.actions) {
-        rm.addRow([w.week, w.theme, a.action, a.owner_role, Math.round(a.hours), a.deliverable, w.kpi_checkpoint]);
+        rm.addRow([
+          w.week,
+          isoDate(weekDueDate(plan.createdAt, w.week)),
+          w.theme,
+          a.action,
+          a.why ?? "",
+          (a.how ?? []).map((s, i) => `${i + 1}) ${s}`).join("\n"),
+          a.owner_role,
+          Math.round(a.hours),
+          a.deliverable,
+          w.kpi_checkpoint,
+        ]);
       }
     }
     rm.getRow(1).font = { bold: true };
+  }
+
+  if (roadmap.guidelines.length) {
+    const gl = wb.addWorksheet("Guidelines");
+    gl.columns = [{ header: "Execution guideline", width: 100 }];
+    for (const g of roadmap.guidelines) gl.addRow([g]);
+    gl.getRow(1).font = { bold: true };
   }
 
   const asm = wb.addWorksheet("Assumptions");

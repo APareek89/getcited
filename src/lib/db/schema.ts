@@ -176,8 +176,9 @@ export const plans = pgTable(
     runId: uuid("run_id"),
     tactics: jsonb("tactics").$type<unknown[]>().notNull().default([]),
     projection: jsonb("projection").$type<Record<string, unknown>>(),
-    // Week-by-week execution roadmap (LLM-expanded; manager-shareable in the PDF).
-    roadmap: jsonb("roadmap").$type<unknown[]>(),
+    // Week-by-week execution roadmap (LLM-expanded; manager-shareable in the docs).
+    // Legacy rows store RoadmapWeek[]; current rows store {weeks, guidelines}.
+    roadmap: jsonb("roadmap").$type<unknown>(),
     targetCitationShare: real("target_citation_share"),
     timelineWeeks: integer("timeline_weeks"),
     // high | medium | low

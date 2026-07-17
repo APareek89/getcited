@@ -15,7 +15,7 @@ import {
 } from "@/lib/geo";
 import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
-import { generateRoadmap } from "@/lib/geo/roadmap";
+import { generateRoadmap, type RoadmapDoc } from "@/lib/geo/roadmap";
 import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 
 export const maxDuration = 300;
@@ -194,7 +194,7 @@ const handler = createMcpHandler(
           timelineWeeks: weeks,
           grounding: { crawl: dx.crawlGrounded },
         });
-        let roadmap: unknown[] = [];
+        let roadmap: RoadmapDoc = { weeks: [], guidelines: [] };
         try {
           roadmap = await generateRoadmap({
             anthropicKey: serverProviderKeys().anthropic!,
@@ -205,7 +205,7 @@ const handler = createMcpHandler(
             timelineWeeks: weeks,
             teamSize: team,
           });
-        } catch { roadmap = []; }
+        } catch { roadmap = { weeks: [], guidelines: [] }; }
         const saved = await mcpSavePlan({
           userId,
           configId: cfg?.id ?? null,

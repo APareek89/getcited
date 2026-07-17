@@ -28,7 +28,7 @@ out of the assistant tabs)** · Dashboard. Assistant no longer has an Agent/MCP 
 `/mcp` added to PROTECTED_PREFIXES. Also fixed missing `--color-danger` mapping (text-danger classes
 were silently no-oping).
 
-## UI fix round 2 + Tracker (user feedback 2026-07-17 from live screenshots) — items 1–4 DONE (awaiting user live check), 5–6 in progress
+## UI fix round 2 + Tracker (user feedback 2026-07-17 from live screenshots) — items 1–5 DONE (awaiting user live check), 6 in progress
 1. **Configure layout** (`src/app/(app)/configure/page.tsx` + `components/configure/*`): too much dead
    space. Split into TWO columns — left "Business" (brand/competitors/queries/budget), right "Platform"
    (We Serve/Self Serve + BYOK). Compact the cards; page must fit the viewport with NO scrolling unless

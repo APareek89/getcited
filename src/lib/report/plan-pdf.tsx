@@ -9,14 +9,10 @@ import {
 } from "@react-pdf/renderer";
 import type { PlanView } from "@/lib/db/plans";
 import type { ConfigView } from "@/lib/db/configs";
-import type { RoadmapWeek } from "@/lib/geo/roadmap";
+import { normalizeRoadmap, fmtWeekRange } from "@/lib/geo/schedule";
 
 function pct(n: number | null | undefined) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
-}
-
-function roadmapOf(plan: PlanView): RoadmapWeek[] {
-  return Array.isArray(plan.roadmap) ? (plan.roadmap as RoadmapWeek[]) : [];
 }
 
 const s = StyleSheet.create({
@@ -35,6 +31,7 @@ const s = StyleSheet.create({
 function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
   const p = plan.projection;
   const brand = cfg?.brandName || cfg?.brandUrl || "Your brand";
+  const roadmap = normalizeRoadmap(plan.roadmap);
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -87,16 +84,27 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
         </View>
       </Page>
 
-      {roadmapOf(plan).length > 0 && (
+      {roadmap.weeks.length > 0 && (
         <Page size="A4" style={s.page}>
           <Text style={s.h1}>Week-by-week roadmap</Text>
           <Text style={s.sub}>
             Hand this to the team: every action has an owner role, hours and a deliverable.
+            Dates run from the plan creation date. Full WHY/HOW detail is in the Word export.
           </Text>
-          {roadmapOf(plan).map((w) => (
+          {roadmap.guidelines.length > 0 && (
+            <View style={s.card}>
+              <Text style={{ fontSize: 11, marginBottom: 4 }}>How to run this plan</Text>
+              {roadmap.guidelines.map((g, i) => (
+                <Text style={s.li} key={i}>
+                  • {g}
+                </Text>
+              ))}
+            </View>
+          )}
+          {roadmap.weeks.map((w) => (
             <View style={s.card} key={w.week} wrap={false}>
               <Text style={{ fontSize: 12, marginBottom: 4 }}>
-                Week {w.week} — {w.theme}
+                Week {w.week} · {fmtWeekRange(plan.createdAt, w.week)} — {w.theme}
               </Text>
               <View style={s.row}>
                 <Text style={[s.th, { width: "44%" }]}>Action</Text>
@@ -106,7 +114,10 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
               </View>
               {w.actions.map((a, i) => (
                 <View style={s.row} key={i}>
-                  <Text style={{ width: "44%" }}>{a.action}</Text>
+                  <View style={{ width: "44%" }}>
+                    <Text>{a.action}</Text>
+                    {a.why ? <Text style={[s.li, { marginTop: 2 }]}>Why: {a.why}</Text> : null}
+                  </View>
                   <Text style={[s.muted, { width: "18%" }]}>{a.owner_role}</Text>
                   <Text style={[s.muted, { width: "8%", textAlign: "right" }]}>{Math.round(a.hours)}</Text>
                   <Text style={[s.muted, { width: "30%" }]}>{a.deliverable}</Text>

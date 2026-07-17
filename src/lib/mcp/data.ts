@@ -55,7 +55,7 @@ export async function mcpSavePlan(params: {
   runId: string | null;
   tactics: ChosenTactic[];
   projection: Projection;
-  roadmap?: unknown[] | null;
+  roadmap?: unknown | null;
 }): Promise<{ id: string }> {
   const rows = await db
     .insert(schema.plans)
@@ -79,7 +79,7 @@ export async function mcpLatestPlan(userId: string): Promise<{
   id: string;
   tactics: ChosenTactic[];
   projection: Projection | null;
-  roadmap: unknown[] | null;
+  roadmap: unknown | null;
   targetCitationShare: number | null;
   createdAt: string;
 } | null> {
@@ -95,7 +95,7 @@ export async function mcpLatestPlan(userId: string): Promise<{
     id: r.id,
     tactics: (r.tactics ?? []) as ChosenTactic[],
     projection: (r.projection ?? null) as Projection | null,
-    roadmap: (r.roadmap ?? null) as unknown[] | null,
+    roadmap: (r.roadmap ?? null) as unknown | null,
     targetCitationShare: r.targetCitationShare,
     createdAt: r.createdAt.toISOString(),
   };

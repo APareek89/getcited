@@ -8,7 +8,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 export const maxDuration = 60;
 
 /**
- * Download a plan report. ?format=html|xlsx|pdf (default html). RLS scopes the plan to
+ * Download a plan report. ?format=html|xlsx|pdf|docx (default html). RLS scopes the plan to
  * the signed-in user. Records a `reports` row (best-effort) for the dashboard.
  */
 export async function GET(
@@ -45,6 +45,18 @@ export async function GET(
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "content-disposition": `attachment; filename="${filenameBase}.xlsx"`,
+      },
+    });
+  }
+
+  if (format === "docx") {
+    const { buildPlanDocx } = await import("@/lib/report/plan-docx");
+    const buf = await buildPlanDocx(plan, cfg);
+    return new NextResponse(new Uint8Array(buf), {
+      headers: {
+        "content-type":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "content-disposition": `attachment; filename="${filenameBase}.docx"`,
       },
     });
   }

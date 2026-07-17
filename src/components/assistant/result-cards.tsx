@@ -86,6 +86,13 @@ interface RoadmapWeek {
   actions: { tactic_id: string; action: string; owner_role: string; hours: number; deliverable: string }[];
   kpi_checkpoint: string;
 }
+interface RoadmapOverviewWeek {
+  week: number;
+  theme: string;
+  kpi_checkpoint: string;
+  due_date?: string;
+  action_count?: number;
+}
 
 export interface PlanOutput {
   plan_id: string;
@@ -97,16 +104,29 @@ export interface PlanOutput {
   spent_hours: number;
   tactics: ChosenTactic[];
   projection: Projection;
+  /** Legacy threads: full roadmap streamed into the chat. */
   roadmap?: RoadmapWeek[];
+  /** Current shape: compact overview; full detail lives in the downloads. */
+  roadmap_overview?: RoadmapOverviewWeek[];
+  execution_guidelines?: string[];
   capacity_note?: string;
 }
 
+/** Compact summary card — the detailed plan is the downloadable document. */
 export function PlanResult({ data }: { data: PlanOutput }) {
-  const [showAssumptions, setShowAssumptions] = useState(false);
-  const [openWeeks, setOpenWeeks] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const p = data.projection;
+  const overview: RoadmapOverviewWeek[] =
+    data.roadmap_overview ??
+    (data.roadmap ?? []).map((w) => ({
+      week: w.week,
+      theme: w.theme,
+      kpi_checkpoint: w.kpi_checkpoint,
+      action_count: w.actions?.length,
+    }));
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Projection headline */}
       <div className="rounded-xl border border-border bg-secondary/40 p-4">
         <div className="flex items-center gap-2">
@@ -129,68 +149,21 @@ export function PlanResult({ data }: { data: PlanOutput }) {
           </span>
           <span className="text-xs text-muted-foreground">in ~{p.timelineWeeks} weeks</span>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg bg-background/50 p-2">
-            <div className="text-[11px] text-muted-foreground">Extra AI sessions / mo</div>
-            <div className="font-semibold">≈ +{p.projectedTrafficUplift.toLocaleString()}</div>
-          </div>
-          <div className="rounded-lg bg-background/50 p-2">
-            <div className="text-[11px] text-muted-foreground">Extra conversions / mo</div>
-            <div className="font-semibold">≈ +{p.projectedConversions.toLocaleString()}</div>
-          </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          ≈ +{p.projectedTrafficUplift.toLocaleString()} AI sessions/mo · ≈ +
+          {p.projectedConversions.toLocaleString()} conversions/mo · {data.tactics.length} tactics · $
+          {data.spent_usd.toFixed(0)}/${data.budget_usd.toFixed(0)} · {Math.round(data.spent_hours)}/
+          {Math.round(data.person_hours)}h
         </div>
       </div>
 
-      {/* Tactics */}
-      <div>
-        <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-          <span>Plan · {data.tactics.length} tactics</span>
-          <span>
-            ${data.spent_usd.toFixed(0)} / ${data.budget_usd.toFixed(0)} · {Math.round(data.spent_hours)} /{" "}
-            {Math.round(data.person_hours)} hrs
-          </span>
-        </div>
-        <div className="space-y-1.5">
-          {data.tactics.map((t) => (
-            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-border bg-card p-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm">{t.name}</div>
-                {t.closesGap && (
-                  <div className="text-[10px] uppercase tracking-wide text-primary">closes {t.closesGap} gap</div>
-                )}
-              </div>
-              <div className="shrink-0 text-right text-xs text-muted-foreground">
-                <div>{t.costUsd === 0 ? "free" : `$${t.costUsd.toFixed(0)}`}</div>
-                <div>{Math.round(t.effortHours)}h</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Assumptions + disclaimer */}
-      <div className="rounded-lg border border-warning/20 bg-warning/5 p-3">
-        <div className="flex items-start gap-2">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-          <p className="text-xs text-muted-foreground">{p.disclaimer}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowAssumptions((s) => !s)}
-          className="mt-2 flex items-center gap-1 text-xs text-warning"
-        >
-          Assumptions ({p.assumptions.length})
-          <ChevronDown className={cn("h-3 w-3 transition-transform", showAssumptions && "rotate-180")} />
-        </button>
-        {showAssumptions && (
-          <ul className="mt-2 space-y-1 pl-1">
-            {p.assumptions.map((a, i) => (
-              <li key={i} className="text-[11px] text-muted-foreground">
-                • {a}
-              </li>
-            ))}
-          </ul>
-        )}
+      {/* Downloads — the full WHAT/WHY/HOW/WHO/timeline detail lives here */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">Full detailed plan:</span>
+        <DownloadChip planId={data.plan_id} format="docx" icon={FileText} label="Word (detailed)" />
+        <DownloadChip planId={data.plan_id} format="pdf" icon={FileType} label="PDF" />
+        <DownloadChip planId={data.plan_id} format="xlsx" icon={FileSpreadsheet} label="Excel" />
+        <DownloadChip planId={data.plan_id} format="html" icon={FileText} label="HTML" />
       </div>
 
       {/* Capacity warning */}
@@ -200,52 +173,81 @@ export function PlanResult({ data }: { data: PlanOutput }) {
         </div>
       )}
 
-      {/* Week-by-week roadmap */}
-      {data.roadmap && data.roadmap.length > 0 && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setOpenWeeks((s) => !s)}
-            className="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground"
-          >
-            Week-by-week roadmap ({data.roadmap.length} weeks)
-            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", openWeeks && "rotate-180")} />
-          </button>
-          {openWeeks && (
-            <div className="space-y-2">
-              {data.roadmap.map((w) => (
-                <div key={w.week} className="rounded-lg border border-border bg-card p-3">
-                  <div className="mb-1.5 text-xs font-medium">
-                    Week {w.week} · <span className="text-muted-foreground">{w.theme}</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {w.actions.map((a, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs">
-                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
-                        <span className="min-w-0 flex-1">
-                          {a.action}{" "}
-                          <span className="text-muted-foreground">
-                            — {a.owner_role}, {Math.round(a.hours)}h → {a.deliverable}
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-1.5 text-[11px] text-warning/90">KPI: {w.kpi_checkpoint}</div>
+      <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+        <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+        {p.disclaimer}
+      </p>
+
+      {/* Collapsed detail: tactics, week overview, guidelines, assumptions */}
+      <button
+        type="button"
+        onClick={() => setShowDetails((s) => !s)}
+        className="flex items-center gap-1 text-xs font-medium text-foreground"
+      >
+        Plan details
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showDetails && "rotate-180")} />
+      </button>
+      {showDetails && (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            {data.tactics.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 rounded-lg border border-border bg-card p-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm">{t.name}</div>
+                  {t.closesGap && (
+                    <div className="text-[10px] uppercase tracking-wide text-primary">closes {t.closesGap} gap</div>
+                  )}
+                </div>
+                <div className="shrink-0 text-right text-xs text-muted-foreground">
+                  <div>{t.costUsd === 0 ? "free" : `$${t.costUsd.toFixed(0)}`}</div>
+                  <div>{Math.round(t.effortHours)}h</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {overview.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Roadmap</div>
+              {overview.map((w) => (
+                <div key={w.week} className="flex items-baseline gap-2 text-xs">
+                  <span className="shrink-0 font-medium">Wk {w.week}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{w.theme}</span>
+                  {w.due_date && <span className="shrink-0 text-muted-foreground/70">due {w.due_date}</span>}
                 </div>
               ))}
             </div>
           )}
+
+          {(data.execution_guidelines?.length ?? 0) > 0 && (
+            <div>
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                How to run this plan
+              </div>
+              <ul className="space-y-1">
+                {data.execution_guidelines!.map((g, i) => (
+                  <li key={i} className="text-[11px] text-muted-foreground">
+                    • {g}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-warning">
+              Assumptions ({p.assumptions.length})
+            </div>
+            <ul className="space-y-1">
+              {p.assumptions.map((a, i) => (
+                <li key={i} className="text-[11px] text-muted-foreground">
+                  • {a}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
-
-      {/* Download chips */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Download for your team:</span>
-        <DownloadChip planId={data.plan_id} format="pdf" icon={FileType} label="PDF" />
-        <DownloadChip planId={data.plan_id} format="xlsx" icon={FileSpreadsheet} label="Excel" />
-        <DownloadChip planId={data.plan_id} format="html" icon={FileText} label="HTML" />
-      </div>
     </div>
   );
 }
