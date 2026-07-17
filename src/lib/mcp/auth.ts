@@ -41,13 +41,8 @@ function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 
-/** Public origin of THIS deployment (issuer + audience), from the request URL. */
-export function publicOrigin(req: Request): string {
-  const fwdHost = req.headers.get("x-forwarded-host");
-  const fwdProto = req.headers.get("x-forwarded-proto") ?? "https";
-  if (fwdHost) return `${fwdProto}://${fwdHost}`.replace(/\/+$/, "");
-  return new URL(req.url).origin.replace(/\/+$/, "");
-}
+/** Public origin of THIS deployment (issuer + audience) — see lib/http/origin. */
+export { publicOrigin } from "@/lib/http/origin";
 
 // ── DCR clients ───────────────────────────────────────────────────────────────
 export interface McpClient {

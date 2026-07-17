@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { publicOrigin } from "@/lib/http/origin";
 
 /** Routes that require an authenticated user. Everything else is public. */
 // NOTE: /mcp is NOT here — it is the MCP tool endpoint (bearer-token auth via
@@ -53,8 +54,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    // publicOrigin, NOT nextUrl.clone(): behind Render's proxy nextUrl's host is
+    // the internal bind address (localhost:$PORT) — a clone() 307s to localhost.
+    const url = new URL("/login", publicOrigin(request));
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }

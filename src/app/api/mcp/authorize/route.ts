@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { getClient, issueCode } from "@/lib/mcp/auth";
+import { publicOrigin } from "@/lib/http/origin";
 
 /**
  * OAuth authorization endpoint. The login gate is the user's GetCited Supabase
@@ -36,9 +37,9 @@ export async function GET(req: NextRequest) {
   // Login gate: the GetCited session. Preserve the FULL authorize URL through login.
   const user = await getUser();
   if (!user) {
-    const login = req.nextUrl.clone();
-    login.pathname = "/login";
-    login.search = "";
+    // publicOrigin, NOT req.nextUrl: behind Render's proxy nextUrl's host is the
+    // internal bind address (localhost:$PORT) — a clone() here 307s to localhost.
+    const login = new URL("/login", publicOrigin(req));
     login.searchParams.set("next", `${req.nextUrl.pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(login);
   }

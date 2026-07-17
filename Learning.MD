@@ -111,3 +111,19 @@ excludes machine surfaces (mcp$|api/|\.well-known/|healthz$).
 **Watch for later:** anything that must answer at an exact public path (webhooks, OAuth
 metadata, MCP) needs a real route at that path — never a rewrite — and must be excluded
 from the session middleware.
+
+## 2026-07-17 — Render proxy rewrites Host to localhost:$PORT → OAuth login redirect went to localhost:8080
+**What happened:** First real connector install against the deployed app: Claude hit
+/api/mcp/authorize, wasn't logged in, and got redirected to http://localhost:8080/login?next=…
+(ERR_CONNECTION_REFUSED in the user's browser).
+**Root cause:** Render's proxy rewrites the Host header to the app's internal bind address
+(localhost:$PORT) and carries the public host ONLY in x-forwarded-host. Next.js builds
+request.url / req.nextUrl from Host, so every absolute URL built from them
+(nextUrl.clone(), new URL(request.url).origin, new URL("/", request.url)) leaks
+localhost:8080. Everything that used the x-forwarded-aware publicOrigin() (401 challenge,
+well-known docs, JWT issuer) was correct — only the redirect builders were wrong.
+**Fix:** dependency-free src/lib/http/origin.ts publicOrigin() (x-forwarded-host/proto,
+comma-list safe; middleware-importable). Rewired: authorize login redirect, auth/callback
+(all 3 redirects), signout, middleware /login redirect. lib/mcp/auth.ts re-exports it.
+**Watch for later:** NEVER build an absolute same-origin URL from request.url/req.nextUrl
+in server code — always publicOrigin(). Relative paths in ?next= params are fine.
