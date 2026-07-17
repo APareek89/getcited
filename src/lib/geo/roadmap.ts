@@ -75,7 +75,7 @@ export async function generateRoadmap(params: {
     .map((g) => `- ${g.sourceType}: you ${g.you} vs category ${g.leader} (deficit ${g.deficit})`)
     .join("\n");
 
-  const res = await generateObject({
+  const req = {
     model: anthropicModel(ROADMAP_MODEL_ID, params.anthropicKey),
     schema: RoadmapSchema,
     system:
@@ -95,6 +95,16 @@ export async function generateRoadmap(params: {
       `Produce ${Math.min(params.timelineWeeks, 12)} weeks. Every tactic must appear in at least one week.`,
     maxOutputTokens: 16000,
     experimental_telemetry: { isEnabled: true, functionId: "roadmap" },
-  });
-  return res.object;
+  };
+  // One retry: roadmap failure used to be swallowed into a silent empty roadmap,
+  // which ships a planless plan document. A single retry absorbs transient
+  // provider errors; a persistent failure still throws so callers can surface it.
+  try {
+    const res = await generateObject(req);
+    return res.object;
+  } catch (first) {
+    console.error("[roadmap] generation failed, retrying once:", first instanceof Error ? first.message : first);
+    const res = await generateObject(req);
+    return res.object;
+  }
 }

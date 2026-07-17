@@ -206,6 +206,7 @@ const handler = createMcpHandler(
           grounding: { crawl: dx.crawlGrounded },
         });
         let roadmap: RoadmapDoc = { weeks: [], guidelines: [] };
+        let roadmapError: string | null = null;
         try {
           roadmap = await generateRoadmap({
             anthropicKey: serverProviderKeys().anthropic!,
@@ -216,7 +217,10 @@ const handler = createMcpHandler(
             timelineWeeks: weeks,
             teamSize: team,
           });
-        } catch { roadmap = { weeks: [], guidelines: [] }; }
+        } catch (e) {
+          roadmapError = e instanceof Error ? e.message : "unknown error";
+          console.error("[mcp build_plan] roadmap generation failed after retry:", roadmapError);
+        }
         const saved = await mcpSavePlan({
           userId,
           configId: cfg?.id ?? null,
@@ -233,6 +237,9 @@ const handler = createMcpHandler(
           roadmap,
           spent_usd: allocation.spentUsd,
           spent_hours: allocation.spentHours,
+          roadmap_error: roadmapError
+            ? `Week-by-week roadmap generation failed (${roadmapError}) — rebuild the plan to retry.`
+            : undefined,
         });
       },
     );

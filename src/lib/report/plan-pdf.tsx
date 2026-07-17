@@ -15,6 +15,28 @@ function pct(n: number | null | undefined) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
 }
 
+/**
+ * @react-pdf uses the built-in Helvetica (WinAnsi) — glyphs like → and ≈ don't
+ * exist there and render as apostrophes/garbage. LLM-generated roadmap text can
+ * contain anything, so every dynamic string goes through this.
+ */
+function pdfSafe(v: string | null | undefined): string {
+  if (!v) return "";
+  return v
+    .replace(/→|⟶|⇒/g, "->")
+    .replace(/←|⟵|⇐/g, "<-")
+    .replace(/≈/g, "~")
+    .replace(/±/g, "+/-")
+    .replace(/×/g, "x")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+}
+
+function weeksLabel(n: number | null | undefined): string {
+  const w = n ?? 0;
+  return `${w} ${w === 1 ? "week" : "weeks"}`;
+}
+
 const s = StyleSheet.create({
   page: { backgroundColor: "#0B0D10", color: "#E6E8EB", padding: 36, fontSize: 10 },
   h1: { fontSize: 20, marginBottom: 2 },
@@ -26,12 +48,14 @@ const s = StyleSheet.create({
   muted: { color: "#8A9099" },
   warn: { color: "#E0A32E" },
   li: { color: "#8A9099", fontSize: 8, marginBottom: 2 },
+  how: { color: "#8A9099", fontSize: 7, marginBottom: 1, marginLeft: 6 },
 });
 
 function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
   const p = plan.projection;
-  const brand = cfg?.brandName || cfg?.brandUrl || "Your brand";
+  const brand = pdfSafe(cfg?.brandName || cfg?.brandUrl || "Your brand");
   const roadmap = normalizeRoadmap(plan.roadmap);
+  const weeks = p?.timelineWeeks ?? plan.timelineWeeks;
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -44,10 +68,10 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
             <Text style={{ fontSize: 22 }}>{pct(p?.currentCitationShare)}</Text>
             <Text style={s.muted}> {"  ->  "} </Text>
             <Text style={s.big}>{pct(p?.targetCitationShare)}</Text>
-            <Text style={s.muted}> in ~{p?.timelineWeeks ?? plan.timelineWeeks} weeks</Text>
+            <Text style={s.muted}> in {weeksLabel(weeks)}</Text>
           </Text>
           <Text style={{ marginTop: 6 }}>
-            ≈ +{(p?.projectedTrafficUplift ?? 0).toLocaleString()} AI sessions/mo · ≈ +
+            ~ +{(p?.projectedTrafficUplift ?? 0).toLocaleString()} AI sessions/mo · ~ +
             {(p?.projectedConversions ?? 0).toLocaleString()} conversions/mo
           </Text>
         </View>
@@ -55,30 +79,45 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
         <View style={s.card}>
           <Text style={{ marginBottom: 6 }}>Plan · {plan.tactics.length} tactics</Text>
           <View style={s.row}>
-            <Text style={[s.th, { width: "50%" }]}>Tactic</Text>
-            <Text style={[s.th, { width: "20%" }]}>Closes gap</Text>
-            <Text style={[s.th, { width: "15%", textAlign: "right" }]}>Cost</Text>
-            <Text style={[s.th, { width: "15%", textAlign: "right" }]}>Effort</Text>
+            <Text style={[s.th, { width: "42%" }]}>Tactic</Text>
+            <Text style={[s.th, { width: "18%" }]}>Closes gap</Text>
+            <Text style={[s.th, { width: "13%", textAlign: "right" }]}>Cost</Text>
+            <Text style={[s.th, { width: "12%", textAlign: "right" }]}>Effort</Text>
+            <Text style={[s.th, { width: "15%", textAlign: "right" }]}>Lead time</Text>
           </View>
           {plan.tactics.map((t) => (
             <View style={s.row} key={t.id}>
-              <Text style={{ width: "50%" }}>{t.name}</Text>
-              <Text style={[s.muted, { width: "20%" }]}>{t.closesGap ?? "—"}</Text>
-              <Text style={[s.muted, { width: "15%", textAlign: "right" }]}>
+              <Text style={{ width: "42%" }}>{pdfSafe(t.name)}</Text>
+              <Text style={[s.muted, { width: "18%" }]}>{pdfSafe(t.closesGap) || "—"}</Text>
+              <Text style={[s.muted, { width: "13%", textAlign: "right" }]}>
                 {t.costUsd === 0 ? "free" : `$${t.costUsd.toFixed(0)}`}
               </Text>
-              <Text style={[s.muted, { width: "15%", textAlign: "right" }]}>{Math.round(t.effortHours)}h</Text>
+              <Text style={[s.muted, { width: "12%", textAlign: "right" }]}>{Math.round(t.effortHours)}h</Text>
+              <Text style={[s.muted, { width: "15%", textAlign: "right" }]}>
+                wk {t.leadWeeks[0]}–{t.leadWeeks[1]}
+              </Text>
             </View>
           ))}
         </View>
 
+        {roadmap.weeks.length === 0 && (
+          <View style={s.card}>
+            <Text style={s.warn}>No week-by-week roadmap in this plan.</Text>
+            <Text style={[s.muted, { marginTop: 4, fontSize: 9 }]}>
+              Roadmap generation failed or was skipped when this plan was built. Rebuild the
+              plan in GetCited (ask the GEO Agent to &quot;rebuild my plan&quot;) to get the full
+              schedule with owners, hours, deliverables and dates.
+            </Text>
+          </View>
+        )}
+
         <View style={s.card}>
           <Text style={s.warn}>Modeled projection — not a guarantee.</Text>
-          <Text style={[s.muted, { marginTop: 4, fontSize: 9 }]}>{p?.disclaimer ?? ""}</Text>
+          <Text style={[s.muted, { marginTop: 4, fontSize: 9 }]}>{pdfSafe(p?.disclaimer)}</Text>
           <Text style={{ marginTop: 6, fontSize: 9 }}>Assumptions:</Text>
           {(p?.assumptions ?? []).map((a, i) => (
             <Text style={s.li} key={i}>
-              • {a}
+              • {pdfSafe(a)}
             </Text>
           ))}
         </View>
@@ -88,26 +127,26 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
         <Page size="A4" style={s.page}>
           <Text style={s.h1}>Week-by-week roadmap</Text>
           <Text style={s.sub}>
-            Hand this to the team: every action has an owner role, hours and a deliverable.
-            Dates run from the plan creation date. Full WHY/HOW detail is in the Word export.
+            Hand this to the team: every action has an owner role, hours, steps and a
+            deliverable. Dates run from the plan creation date.
           </Text>
           {roadmap.guidelines.length > 0 && (
             <View style={s.card}>
               <Text style={{ fontSize: 11, marginBottom: 4 }}>How to run this plan</Text>
               {roadmap.guidelines.map((g, i) => (
                 <Text style={s.li} key={i}>
-                  • {g}
+                  • {pdfSafe(g)}
                 </Text>
               ))}
             </View>
           )}
-          {roadmap.weeks.map((w) => (
-            <View style={s.card} key={w.week} wrap={false}>
+          {roadmap.weeks.map((w, wi) => (
+            <View style={s.card} key={`${w.week}-${wi}`} wrap={false}>
               <Text style={{ fontSize: 12, marginBottom: 4 }}>
-                Week {w.week} · {fmtWeekRange(plan.createdAt, w.week)} — {w.theme}
+                Week {w.week} · {pdfSafe(fmtWeekRange(plan.createdAt, w.week))} — {pdfSafe(w.theme)}
               </Text>
               <View style={s.row}>
-                <Text style={[s.th, { width: "44%" }]}>Action</Text>
+                <Text style={[s.th, { width: "44%" }]}>Action (what · why · how)</Text>
                 <Text style={[s.th, { width: "18%" }]}>Owner</Text>
                 <Text style={[s.th, { width: "8%", textAlign: "right" }]}>Hrs</Text>
                 <Text style={[s.th, { width: "30%" }]}>Deliverable</Text>
@@ -115,15 +154,26 @@ function PlanPdf({ plan, cfg }: { plan: PlanView; cfg: ConfigView | null }) {
               {w.actions.map((a, i) => (
                 <View style={s.row} key={i}>
                   <View style={{ width: "44%" }}>
-                    <Text>{a.action}</Text>
-                    {a.why ? <Text style={[s.li, { marginTop: 2 }]}>Why: {a.why}</Text> : null}
+                    <Text>{pdfSafe(a.action)}</Text>
+                    {a.why ? <Text style={[s.li, { marginTop: 2 }]}>Why: {pdfSafe(a.why)}</Text> : null}
+                    {(a.how?.length ?? 0) > 0 ? (
+                      <View style={{ marginTop: 2 }}>
+                        {a.how!.map((step, j) => (
+                          <Text style={s.how} key={j}>
+                            {j + 1}. {pdfSafe(step)}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
-                  <Text style={[s.muted, { width: "18%" }]}>{a.owner_role}</Text>
+                  <Text style={[s.muted, { width: "18%" }]}>{pdfSafe(a.owner_role)}</Text>
                   <Text style={[s.muted, { width: "8%", textAlign: "right" }]}>{Math.round(a.hours)}</Text>
-                  <Text style={[s.muted, { width: "30%" }]}>{a.deliverable}</Text>
+                  <Text style={[s.muted, { width: "30%" }]}>{pdfSafe(a.deliverable)}</Text>
                 </View>
               ))}
-              <Text style={[s.warn, { marginTop: 5, fontSize: 8 }]}>KPI checkpoint: {w.kpi_checkpoint}</Text>
+              <Text style={[s.warn, { marginTop: 5, fontSize: 8 }]}>
+                KPI checkpoint: {pdfSafe(w.kpi_checkpoint)}
+              </Text>
             </View>
           ))}
         </Page>

@@ -259,7 +259,10 @@ export async function POST(req: Request) {
           });
 
           // Week-by-week roadmap (manager-shareable detail: WHAT/WHY/HOW/WHO + guidelines).
+          // generateRoadmap retries once internally; if it STILL fails we save the plan
+          // without a roadmap but tell the user loudly instead of shipping a planless doc.
           let roadmap: RoadmapDoc = { weeks: [], guidelines: [] };
+          let roadmapError: string | null = null;
           try {
             roadmap = await generateRoadmap({
               anthropicKey: keys.anthropic!,
@@ -270,8 +273,9 @@ export async function POST(req: Request) {
               timelineWeeks: weeks,
               teamSize: team,
             });
-          } catch {
-            roadmap = { weeks: [], guidelines: [] };
+          } catch (e) {
+            roadmapError = e instanceof Error ? e.message : "unknown error";
+            console.error("[build_plan] roadmap generation failed after retry:", roadmapError);
           }
 
           const saved = await savePlan({
@@ -312,6 +316,9 @@ export async function POST(req: Request) {
             execution_guidelines: roadmap.guidelines,
             gap: dx.gap,
             capacity_note: capacityNote,
+            roadmap_error: roadmapError
+              ? `Week-by-week roadmap generation failed (${roadmapError}). The plan document will lack the schedule — offer to rebuild the plan to retry.`
+              : undefined,
           };
         },
       }),

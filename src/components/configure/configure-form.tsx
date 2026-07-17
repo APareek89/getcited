@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertCircle,
+  Briefcase,
   CalendarClock,
   Check,
   DollarSign,
@@ -13,6 +14,7 @@ import {
   MessagesSquare,
   Plus,
   Save,
+  ServerCog,
   Sparkles,
   Swords,
   Users,
@@ -24,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { ConfigurePlatform } from "@/components/configure/configure-platform";
 import type { ConfigView } from "@/lib/db/configs";
@@ -218,6 +219,9 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   // saveModeAction inside ConfigurePlatform and is excluded from dirty state.
   const [mode, setMode] = useState(initial?.mode ?? "we_serve");
 
+  // ── Rail · which panel is visible (Business Context vs Platform) ───────────
+  const [tab, setTab] = useState<"business" | "platform">("business");
+
   // ── A · Save / dirty state ─────────────────────────────────────────────────
   const [savedVersion, setSavedVersion] = useState<number | null>(initial?.version ?? null);
   const [chipKey, setChipKey] = useState(0);
@@ -261,8 +265,9 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   const teamN = Math.round(numOr(teamSize, 2));
   const weeksN = Math.round(numOr(timelineWeeks, 8));
   const hours = Math.max(0, teamN * weeksN * 25);
-  // Step completion: S1 valid URL · S2 ≥1 competitor · S3 ≥3 queries · S4 always.
-  const steps = [urlValid, filledCompetitors >= 1, queries.length >= 3, true];
+  const planErr = budgetErr ?? teamErr ?? weeksErr;
+  // Step completion: S1 valid URL (plan fields have defaults) · S2 ≥1 competitor · S3 ≥3 queries.
+  const steps = [urlValid, filledCompetitors >= 1, queries.length >= 3];
   const doneCount = steps.filter(Boolean).length;
   const canGenerate = Boolean(brandUrl.trim() || brandName.trim());
   const isDirty =
@@ -411,7 +416,10 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
           : teamErr
             ? teamRef.current
             : weeksRef.current;
-      firstInvalid?.focus();
+      // Every gated field lives on the Business Context panel — surface it
+      // first, then focus once the panel is visible again.
+      setTab("business");
+      requestAnimationFrame(() => firstInvalid?.focus());
       setShaking(true);
       window.setTimeout(() => setShaking(false), 250);
       return; // errors are already visible inline — no toast for client errors
@@ -508,7 +516,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
             ))}
           </ol>
           <span className="ml-2 text-xs text-muted-foreground">
-            {doneCount} of 4 steps done
+            {doneCount} of {steps.length} steps done
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -559,16 +567,77 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
         </div>
       </header>
 
-      {/* B · Step grid — three Tier-1 columns, reading order = step order */}
-      <div className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:items-stretch">
-        {/* B1 · Step 1 — Brand */}
+      {/* B · Rail + panels — the left rail is primary navigation between the
+          Business Context and Platform surfaces, inside the viewport frame. */}
+      <div className="flex flex-1 flex-col gap-3 lg:min-h-0 lg:flex-row lg:gap-4">
+        {/* B0 · Navigation rail — vertical at lg+, horizontal row below. */}
+        <nav aria-label="Configuration sections" className="flex shrink-0 gap-2 lg:w-[188px] lg:flex-col">
+          {(
+            [
+              {
+                id: "business" as const,
+                label: "Business Context",
+                caption: "Brand · competitors · queries",
+                icon: Briefcase,
+              },
+              {
+                id: "platform" as const,
+                label: "Platform",
+                caption: mode === "self_serve" ? "Self Serve · your keys" : "We Serve · our keys",
+                icon: ServerCog,
+              },
+            ]
+          ).map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                aria-current={active ? "true" : undefined}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "flex flex-1 items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition lg:flex-none",
+                  active
+                    ? "border-transparent bg-aurora text-white shadow-[0_0_18px_rgba(124,58,237,0.35)]"
+                    : "border-white/[0.1] bg-white/[0.04] text-muted-foreground hover:border-white/[0.18] hover:bg-white/[0.06] hover:text-foreground",
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{t.label}</span>
+                  <span
+                    className={cn(
+                      "block truncate text-[10px]",
+                      active ? "text-white/75" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {t.caption}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+      {/* B1–B3 · Business Context panel — three Tier-1 columns, reading order =
+          step order. Kept mounted (hidden via display) so field refs, focus
+          targets and internal scroll state survive tab switches. */}
+      <div
+        className={
+          tab === "business"
+            ? "grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:items-stretch"
+            : "hidden"
+        }
+      >
+        {/* B1 · Step 1 — Brand & plan */}
         <section className={cn(TIER1, "flex h-full flex-col gap-4 p-5 lg:col-span-4")}>
           <CardHead
             icon={Globe}
             num="01"
-            title="Your brand"
+            title="Brand & plan"
             done={steps[0]}
-            hint="We watch AI answers for citations of your site and mentions of your name."
+            hint="Citations tracked for your site · budget, team and duration bound what plan is possible."
           />
           <div className="space-y-4">
             <div>
@@ -689,6 +758,111 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                     {description.length}/1000
                   </span>
                 )}
+              </div>
+            </div>
+
+            {/* Plan constraints live with the brand — the agentic flow uses
+                budget, team and duration to bound what plan is possible. */}
+            <div className={cn(TIER2, "p-3")}>
+              <div className={MICRO_LABEL}>Plan constraints</div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label
+                    htmlFor="budget"
+                    className={cn(
+                      "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em]",
+                      budgetErr ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    <DollarSign className="h-3 w-3" /> Budget $
+                  </label>
+                  <Input
+                    id="budget"
+                    ref={budgetRef}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={1000000}
+                    step={100}
+                    aria-invalid={budgetErr ? true : undefined}
+                    value={budget}
+                    className={cn(FIELD, "text-sm tabular-nums")}
+                    onChange={(e) => setBudget(e.target.value)}
+                    onBlur={() => setBudget((v) => clampOnBlur(v, 0, 1_000_000, 400))}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="team"
+                    className={cn(
+                      "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em]",
+                      teamErr ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    <Users className="h-3 w-3" /> Team
+                  </label>
+                  <Input
+                    id="team"
+                    ref={teamRef}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={1}
+                    aria-invalid={teamErr ? true : undefined}
+                    value={teamSize}
+                    className={cn(FIELD, "text-sm tabular-nums")}
+                    onChange={(e) => setTeamSize(e.target.value)}
+                    onBlur={() => setTeamSize((v) => clampOnBlur(v, 1, 100, 2))}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="timeline"
+                    className={cn(
+                      "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em]",
+                      weeksErr ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    <CalendarClock className="h-3 w-3" /> Weeks
+                  </label>
+                  <Input
+                    id="timeline"
+                    ref={weeksRef}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={104}
+                    step={1}
+                    aria-invalid={weeksErr ? true : undefined}
+                    value={timelineWeeks}
+                    className={cn(FIELD, "text-sm tabular-nums")}
+                    onChange={(e) => setTimelineWeeks(e.target.value)}
+                    onBlur={() => setTimelineWeeks((v) => clampOnBlur(v, 1, 104, 8))}
+                  />
+                </div>
+              </div>
+              {/* Derived capacity readout — assumption pinned in UI, not a tooltip. */}
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[11px]">
+                  {planErr ? (
+                    <span className="text-destructive">{planErr}</span>
+                  ) : (
+                    <span className="text-muted-foreground/70 tabular-nums">
+                      {teamN} people × {weeksN} wks × ~25 hrs/wk
+                    </span>
+                  )}
+                </p>
+                <p className="shrink-0 text-[11px] text-muted-foreground">
+                  ≈{" "}
+                  <span
+                    key={hours}
+                    className="animate-in fade-in zoom-in-95 text-sm font-semibold text-aurora tabular-nums duration-200"
+                  >
+                    {hours.toLocaleString("en-US")}
+                  </span>{" "}
+                  person-hrs
+                </p>
               </div>
             </div>
           </div>
@@ -941,138 +1115,11 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
         </section>
       </div>
 
-      {/* C · Step 4 strip — Plan & platform */}
-      <div
-        className={cn(
-          TIER1,
-          "mt-4 flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3 lg:h-[72px] lg:flex-nowrap lg:py-0",
-        )}
-      >
-        <div className="flex shrink-0 items-center gap-2.5">
-          {/* Step 4 has defaults — always complete, numeral always positive. */}
-          <span className="font-mono text-[10px] tracking-wider text-positive">04</span>
-          <div>
-            <div className="text-sm font-semibold">Plan &amp; platform</div>
-            <div className="text-[11px] text-muted-foreground">Sizes your action plan</div>
-          </div>
+        {/* C · Platform panel — three first-class option cards. May scroll
+            internally at lg; the page itself never scrolls. */}
+        <div className={tab === "platform" ? "min-h-0 flex-1 lg:overflow-y-auto" : "hidden"}>
+          <ConfigurePlatform mode={mode} onModeChange={setMode} />
         </div>
-
-        <div className="flex items-end gap-3">
-          <div className="w-[104px]">
-            <label
-              htmlFor="budget"
-              className={cn(
-                "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium",
-                budgetErr
-                  ? "text-destructive whitespace-nowrap"
-                  : "text-muted-foreground uppercase tracking-[0.08em]",
-              )}
-            >
-              {budgetErr ?? (
-                <>
-                  <DollarSign className="h-3 w-3 text-muted-foreground" /> Budget $
-                </>
-              )}
-            </label>
-            <Input
-              id="budget"
-              ref={budgetRef}
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={1000000}
-              step={100}
-              aria-invalid={budgetErr ? true : undefined}
-              value={budget}
-              className={cn(FIELD, "text-sm tabular-nums")}
-              onChange={(e) => setBudget(e.target.value)}
-              onBlur={() => setBudget((v) => clampOnBlur(v, 0, 1_000_000, 400))}
-            />
-          </div>
-          <div className="w-[104px]">
-            <label
-              htmlFor="team"
-              className={cn(
-                "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium",
-                teamErr
-                  ? "text-destructive whitespace-nowrap"
-                  : "text-muted-foreground uppercase tracking-[0.08em]",
-              )}
-            >
-              {teamErr ?? (
-                <>
-                  <Users className="h-3 w-3 text-muted-foreground" /> Team
-                </>
-              )}
-            </label>
-            <Input
-              id="team"
-              ref={teamRef}
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={100}
-              step={1}
-              aria-invalid={teamErr ? true : undefined}
-              value={teamSize}
-              className={cn(FIELD, "text-sm tabular-nums")}
-              onChange={(e) => setTeamSize(e.target.value)}
-              onBlur={() => setTeamSize((v) => clampOnBlur(v, 1, 100, 2))}
-            />
-          </div>
-          <div className="w-[104px]">
-            <label
-              htmlFor="timeline"
-              className={cn(
-                "mb-1 flex h-4 items-center gap-1 text-[10px] font-medium",
-                weeksErr
-                  ? "text-destructive whitespace-nowrap"
-                  : "text-muted-foreground uppercase tracking-[0.08em]",
-              )}
-            >
-              {weeksErr ?? (
-                <>
-                  <CalendarClock className="h-3 w-3 text-muted-foreground" /> Weeks
-                </>
-              )}
-            </label>
-            <Input
-              id="timeline"
-              ref={weeksRef}
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={104}
-              step={1}
-              aria-invalid={weeksErr ? true : undefined}
-              value={timelineWeeks}
-              className={cn(FIELD, "text-sm tabular-nums")}
-              onChange={(e) => setTimelineWeeks(e.target.value)}
-              onBlur={() => setTimelineWeeks((v) => clampOnBlur(v, 1, 104, 8))}
-            />
-          </div>
-        </div>
-
-        {/* Derived capacity readout — assumption pinned in UI, not a tooltip. */}
-        <div className="shrink-0 self-center">
-          <div className="text-[11px] text-muted-foreground">
-            ≈{" "}
-            <span
-              key={hours}
-              className="animate-in fade-in zoom-in-95 text-base font-semibold text-aurora tabular-nums duration-200"
-            >
-              {hours.toLocaleString("en-US")}
-            </span>{" "}
-            person-hrs
-          </div>
-          <div className="text-[10px] text-muted-foreground/70 tabular-nums">
-            {teamN} people × {weeksN} wks × ~25 hrs/wk
-          </div>
-        </div>
-
-        <Separator orientation="vertical" className="hidden h-8 self-center bg-white/10 lg:block" />
-
-        <ConfigurePlatform mode={mode} onModeChange={setMode} />
       </div>
     </>
   );

@@ -79,7 +79,7 @@ ul{margin:8px 0 0;padding-left:18px}li{margin:3px 0;font-size:12px;color:var(--m
   </div>
   <div style="margin:10px 0"><span class="big">${pct(p?.currentCitationShare)}</span>
     <span class="muted"> → </span><span class="big accent">${pct(p?.targetCitationShare)}</span>
-    <span class="muted"> in ~${p?.timelineWeeks ?? plan.timelineWeeks} weeks</span></div>
+    <span class="muted"> in ${p?.timelineWeeks ?? plan.timelineWeeks} ${(p?.timelineWeeks ?? plan.timelineWeeks) === 1 ? "week" : "weeks"}</span></div>
   <div class="grid">
     <div class="kpi"><div class="muted" style="font-size:12px">Extra AI sessions / mo</div><div style="font-weight:600">≈ +${(p?.projectedTrafficUplift ?? 0).toLocaleString()}</div></div>
     <div class="kpi"><div class="muted" style="font-size:12px">Extra conversions / mo</div><div style="font-weight:600">≈ +${(p?.projectedConversions ?? 0).toLocaleString()}</div></div>

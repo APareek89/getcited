@@ -1,9 +1,33 @@
 "use server";
 
 import { requireUser } from "@/lib/auth";
-import { updateTrackerItem, isTrackerStatus, type TrackerStatus } from "@/lib/db/tracker";
+import {
+  approvePlanToTracker,
+  updateTrackerItem,
+  isTrackerStatus,
+  type TrackerStatus,
+} from "@/lib/db/tracker";
+import { getPlanById } from "@/lib/db/plans";
 
 type Result = { ok: true } | { ok: false; error: string };
+
+/**
+ * One-click approve from the chat plan card (same idempotent path the agent's
+ * approve_plan tool uses — both converge on approvePlanToTracker).
+ */
+export async function approvePlanAction(
+  planId: string,
+): Promise<{ ok: true; created: number; alreadyApproved: boolean } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser();
+    const plan = await getPlanById(planId); // RLS-scoped: only the owner's plan resolves
+    if (!plan) return { ok: false, error: "Plan not found" };
+    const res = await approvePlanToTracker(user.id, plan);
+    return { ok: true, ...res };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Approve failed" };
+  }
+}
 
 /** Inline edits from the Tracker table (status dropdown + remarks). RLS-scoped. */
 export async function updateTrackerItemAction(input: {

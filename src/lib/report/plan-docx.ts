@@ -108,7 +108,7 @@ export async function buildPlanDocx(plan: PlanView, cfg: ConfigView | null): Pro
       },
       rows: [
         ["Current AI citation share", pct(p?.currentCitationShare)],
-        ["Projected citation share (modeled)", `${pct(p?.targetCitationShare)} in ~${timeline} weeks`],
+        ["Projected citation share (modeled)", `${pct(p?.targetCitationShare)} in ${timeline} ${timeline === 1 ? "week" : "weeks"}`],
         ["Confidence", p?.confidence ?? "low"],
         ["Extra AI sessions / month (modeled)", `≈ +${(p?.projectedTrafficUplift ?? 0).toLocaleString()}`],
         ["Extra conversions / month (modeled)", `≈ +${(p?.projectedConversions ?? 0).toLocaleString()}`],

@@ -58,6 +58,22 @@ grant, builds sb-…-auth-token cookie (base64url, 3180-char chunks), drives hea
 **+ 3 paid confirmations PASS** (~$0.05 of the user-granted $2): real benchmark (SoV sums 1.0,
 $0.0085), live AI suggest/generate in new UI, build_plan→roadmap WHAT/WHY/HOW/WHO→DOCX. Journal in Loop.MD.
 
+## Round 3 (2026-07-17 night, user-directed) — ✅ SHIPPED
+1. **Configure**: left rail sub-tabs Business Context (01 Brand & plan — brand + budget/team/weeks
+   w/ person-hrs readout · 02 Competitors · 03 Queries) / Platform (3 equal cards: We Serve default
+   w/ provider details · Self Serve w/ INLINE keys, dialog removed · Self Host info card + repo link).
+   3-step progress. Behavior contract preserved (actions payloads, pairing fixes, dirty/Cmd+S).
+2. **Plan card** (chat): rebuilt as deliverable card — visible top-3 tactics + first weeks, PRIMARY
+   "Approve → add to Tracker" button (approvePlanAction in tracker/actions.ts → approvePlanToTracker,
+   idempotent, flips to View-Tracker link), Word/PDF/Excel buttons, roadmap_error banner.
+3. **MCP visibility**: audited — ZERO gaps (same user_id tables both directions); PROVEN live: QA
+   user (100% MCP-origin data) dashboard shows benchmark+plan, tracker shows 20 MCP-approved items.
+4. **Plan docs**: PDF now full parity (WHY/HOW steps, lead-time col, guidelines), pdfSafe() glyph
+   sanitizer (→/≈ garbled in WinAnsi Helvetica), week pluralization everywhere; generateRoadmap
+   retries ×1 and failure SURFACES (chat roadmap_error + MCP field + self-explaining doc notice) —
+   the silent {weeks:[]} swallow that shipped the user's thin PDF is gone.
+5. Master flow .mmd + architecture-flow.html viewer synced (Configure tabs, 3 approve paths, DASH node).
+
 ## Next session — pending points (2026-07-17)
 0. **User validates live** (all auth-gated): round-2 UI fixes (nav-left, header bleed on /dashboard,
    Configure 2-col no-scroll, chat width) + full Tracker flow: build plan → agent asks approval →

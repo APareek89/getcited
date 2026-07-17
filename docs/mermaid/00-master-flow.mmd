@@ -1,10 +1,12 @@
 %% GetCited — MASTER FLOW
-%% current as of Tracker build (plan approval → tracker_items → track_progress). MCP detail: 01-mcp-auth-flow.mmd
+%% current as of round-3 UX build (Configure tabs · plan-card approve · MCP↔dashboard parity).
+%% MCP auth detail: 01-mcp-auth-flow.mmd. MCP and chat write the SAME user_id-scoped tables,
+%% so dashboard/tracker/chat show data from either surface (verified by audit + live QA user).
 flowchart TD
   U["User (signed in)<br/>[DATA · Supabase auth.users]<br/>in: email/Google login<br/>out: user_id"]:::data
   MCPC["MCP connector (Claude etc.)<br/>[FUNCTION · /mcp, OAuth+PKCE, JWT sub=user_id]<br/>see diagram 01"]:::fn
 
-  CFG["Configure page<br/>[FUNCTION]<br/>in: brand URL, competitors x5, budget, team size<br/>out: versioned config row"]:::fn
+  CFG["Configure page — 2 left tabs<br/>[FUNCTION]<br/>Business Context: 01 brand+budget/team/weeks · 02 competitors · 03 queries<br/>Platform: We Serve (default) / Self Serve keys / Self Host link<br/>out: versioned config row (+mode)"]:::fn
   CFGDB["configs<br/>[DATA · Supabase/Drizzle, RLS by user_id]<br/>in: config fields + version<br/>out: latest config"]:::data
   SUG["suggest_queries<br/>[AGENT · Claude]<br/>in: brand + description (+Google Suggest/Perplexity)<br/>out: editable buyer-intent prompts"]:::agent
   DISC["discover_competitors<br/>[AGENT · Claude]<br/>in: brand URL<br/>out: suggested competitor URLs"]:::agent
@@ -14,14 +16,14 @@ flowchart TD
 
   CARDS{"Agent Mode card chosen?<br/>[FUNCTION decides route]"}:::dec
   CONTENT["generate_content<br/>[AGENT · Claude Sonnet]<br/>in: type (blog/vs-page/reddit/li/pitch/review/yt) + topic + config + plan<br/>out: publish-ready markdown draft"]:::agent
-  ROADMAP["generateRoadmap<br/>[AGENT · Claude Sonnet]<br/>in: chosen tactics + gaps + capacity<br/>out: weeks (WHAT/WHY/HOW/WHO/hours/deliverable/KPI) + execution guidelines"]:::agent
+  ROADMAP["generateRoadmap<br/>[AGENT · Claude Sonnet · retries x1]<br/>in: chosen tactics + gaps + capacity<br/>out: weeks (WHAT/WHY/HOW/WHO/hours/deliverable/KPI) + guidelines<br/>persistent failure -> roadmap_error surfaced on card + in doc"]:::agent
 
   BENCH["Card 1 Benchmark<br/>[FUNCTION → pipeline]<br/>in: config<br/>out: SoV + citations + sentiment"]:::fn
   DIAG["Card 2 Diagnose<br/>[FUNCTION → crawl]<br/>in: competitor citations<br/>out: gap analysis (why they win)"]:::fn
   PLAN["Card 3 Plan<br/>[FUNCTION → plan.ts]<br/>in: gaps + budget + team<br/>out: costed tactics + projection"]:::fn
   TRACK["Card 4 Track<br/>[FUNCTION → tracker_items PRIMARY]<br/>in: tracker status + remarks (+ optional re-benchmark)<br/>out: progress %, overdue, blocked, measured impact"]:::fn
 
-  APPROVE{"Approve plan into Tracker?<br/>[ASK · agent asks after build_plan;<br/>approve_plan only on explicit yes]"}:::ask
+  APPROVE{"Approve plan into Tracker?<br/>[ASK · 3 converging paths: agent asks in chat ·<br/>one-click Approve button on the plan card (approvePlanAction) ·<br/>MCP approve_plan — all idempotent via approvePlanToTracker]"}:::ask
   TRACKDB["tracker_items<br/>[DATA · Supabase, RLS owner-only, migration 0006]<br/>in: one row per roadmap action (due = plan created + week×7d)<br/>out: status (not_started/in_progress/done/blocked) + remarks"]:::data
   TRACKPG["/tracker page<br/>[FUNCTION · editable table]<br/>in: tracker_items of latest approved plan<br/>out: status dropdown + inline remarks via server action"]:::fn
 
@@ -39,7 +41,8 @@ flowchart TD
   ALLOC["allocatePlan (greedy knapsack)<br/>[FUNCTION · budget + teamSize*weeks*25h]<br/>in: gaps + tactic library<br/>out: chosen tactics (lift per cost+effort, gap-first)"]:::fn
   PROJ["projectImpact<br/>[FUNCTION]<br/>in: selected tactics (+GSC/Perplexity/Ahrefs if present)<br/>out: target share, traffic, conversions, assumptions, confidence"]:::fn
   CONF{"Grounded by real data?<br/>[FUNCTION]"}:::dec
-  REPORT["generate_report<br/>[LIBRARY · docx / @react-pdf / exceljs / HTML]<br/>in: plan + projection + roadmap (dates from plan creation)<br/>out: downloadable artifact (Word = full WHAT/WHY/HOW/WHO)"]:::data
+  REPORT["generate_report<br/>[LIBRARY · docx / @react-pdf / exceljs / HTML]<br/>in: plan + projection + roadmap (dates from plan creation)<br/>out: downloadable artifact — Word AND PDF carry full WHAT/WHY/HOW/WHO<br/>(PDF unicode-sanitized; missing roadmap self-explains)"]:::data
+  DASH["/dashboard page<br/>[FUNCTION · read-only]<br/>in: runs + sov_history + plans + config (user_id-scoped, chat OR MCP origin)<br/>out: KPIs, SoV trend, leaderboard, active plan + doc downloads"]:::fn
 
   U --> CFG
   U --> THREADS
@@ -74,6 +77,9 @@ flowchart TD
   U --> TRACKPG
   TRACK --> TRACKDB
   TRACK -. "re_benchmark: true (paid — ask first)" .-> PANEL
+  RUNDB --> DASH
+  TRACKDB -. "status counts" .-> DASH
+  U --> DASH
 
   classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
   classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
