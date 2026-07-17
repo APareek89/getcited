@@ -6,7 +6,19 @@
 
 <!-- Newest first. -->
 
-## 2026-07-16 — Thin insights: competitors-as-URLs + dropped Perplexity sources
+## 2026-07-16 — Dev server AuthRetryableFetchError: launcher env lost the corp CA bundle
+**What happened:** After repointing the preview launch config from `pnpm` to a pinned Node 22
+binary, every server-side Supabase fetch failed (`UNABLE_TO_GET_ISSUER_CERT_LOCALLY` →
+`AuthRetryableFetchError` in the UI).
+**Root cause (why-chain):** pinned-binary launch → no shell profile → no `NODE_EXTRA_CA_CERTS`
+→ Node distrusts the corp MITM proxy's re-signed TLS. (The pin itself was needed because the
+preview runner sometimes resolves Node 18, which pnpm 11/corepack can't run under.)
+**Fix:** launch.json entry now carries an explicit `env` block with
+`NODE_EXTRA_CA_CERTS`/`SSL_CERT_FILE` = corp CA bundle, plus the pinned Node 22 + direct
+`node_modules/next/dist/bin/next` invocation. `run-dev.sh` exists for manual terminal runs
+(the preview runner can't exec scripts in Documents — "Operation not permitted").
+**Watch for later:** ANY new way of launching this app (Vercel build? cron? worker?) on this
+machine needs the CA bundle env or all Supabase/Anthropic/crawl fetches fail the same way.
 **What happened:** User's real benchmark returned thin insights (mentions=[] on most answers,
 sonar answers with zero citations, citations table empty, plan target only ~5%).
 **Root cause (4 stacked):** (1) Configure saved competitors as normalized URLs — the parser
