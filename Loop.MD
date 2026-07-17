@@ -1,7 +1,10 @@
 # Loop.MD — GetCited
-status: offered
-<!-- First draft is working (all phases + v1.1). Loop offered 2026-07-16, unanswered —
-     re-ask once at next session start per the state machine. -->
+status: on
+<!-- Turned ON 2026-07-17 (user: "free evals only, no API calls"). Constraint: the loop
+     runs typecheck/lint/vitest + the evals below ONLY via mock mode / pure functions /
+     code inspection — never a real LLM, crawl, or other paid/API call. Evals needing a
+     signed-in browser session (e.g. #5) are marked manual and reported as ⏭ user-validates.
+     Paid checks stay per-approval with a written hypothesis (run journal below). -->
 
 
 > AGENT INSTRUCTION — read every session and obey:
