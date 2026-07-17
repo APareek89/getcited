@@ -9,6 +9,10 @@ const TOOLS = [
   { name: "run_benchmark", desc: "Run an AI panel → share-of-voice, citation share, sentiment. Costs a few cents (capped)." },
   { name: "get_report", desc: "Fetch a previous benchmark report by report_id." },
   { name: "build_plan", desc: "Costed action plan + modeled projection (assumptions listed, never a guarantee)." },
+  { name: "get_latest_plan", desc: "Fetch your most recent plan (tactics, projection, roadmap)." },
+  { name: "approve_plan", desc: "Approve a plan into your Tracker (asks first; idempotent)." },
+  { name: "get_tracker", desc: "Read Tracker items — the primary source for progress questions." },
+  { name: "generate_content", desc: "GEO-optimized content for a tactic (blog, comparison, Reddit, LinkedIn…)." },
 ];
 
 export function McpPanel() {
@@ -18,7 +22,7 @@ export function McpPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrigin(window.location.origin);
   }, []);
-  const mcpUrl = `${origin}/api/mcp`;
+  const mcpUrl = `${origin}/mcp`;
 
   function copy() {
     navigator.clipboard.writeText(mcpUrl).then(() => {

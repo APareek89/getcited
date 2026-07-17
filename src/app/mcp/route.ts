@@ -29,7 +29,10 @@ import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 export const maxDuration = 300;
 
 /**
- * The GetCited MCP endpoint (streamable HTTP, stateless) — POST /api/mcp.
+ * The GetCited MCP endpoint (streamable HTTP, stateless) — POST /mcp.
+ * Top-level path (basePath "") so the deployed URL matches the legacy
+ * geo-radar connector URL https://geo-radar-mcp.onrender.com/mcp exactly —
+ * existing claude.ai connectors re-auth in place, no URL edit needed.
  * Auth: bearer JWT from our self-hosted OAuth (sub = user id), or the static
  * MCP_API_KEY (maps to nothing user-specific → config tools return guidance).
  * Tool logic mirrors /api/chat but reads via the user-scoped Drizzle store.
@@ -319,7 +322,7 @@ const handler = createMcpHandler(
     serverInfo: { name: "getcited", version: "0.1.0" },
   },
   {
-    basePath: "/api",
+    basePath: "", // endpoints derive to top-level /mcp (matches this file's route path)
     maxDuration: 300,
     disableSse: true,
     verboseLogs: false,

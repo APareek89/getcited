@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/configure", label: "Configure", icon: SlidersHorizontal },
   { href: "/assistant", label: "GEO Agent", icon: Bot },
-  { href: "/mcp", label: "GEO MCP", icon: Plug },
+  { href: "/connector", label: "GEO MCP", icon: Plug },
   { href: "/tracker", label: "Tracker", icon: ListChecks },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];

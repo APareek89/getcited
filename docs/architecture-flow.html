@@ -16,7 +16,7 @@
 %% current as of Tracker build (plan approval → tracker_items → track_progress). MCP detail: 01-mcp-auth-flow.mmd
 flowchart TD
   U["User (signed in)&lt;br/&gt;[DATA · Supabase auth.users]&lt;br/&gt;in: email/Google login&lt;br/&gt;out: user_id"]:::data
-  MCPC["MCP connector (Claude etc.)&lt;br/&gt;[FUNCTION · api/mcp, OAuth+PKCE, JWT sub=user_id]&lt;br/&gt;see diagram 01"]:::fn
+  MCPC["MCP connector (Claude etc.)&lt;br/&gt;[FUNCTION · /mcp, OAuth+PKCE, JWT sub=user_id]&lt;br/&gt;see diagram 01"]:::fn
 
   CFG["Configure page&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: brand URL, competitors x5, budget, team size&lt;br/&gt;out: versioned config row"]:::fn
   CFGDB["configs&lt;br/&gt;[DATA · Supabase/Drizzle, RLS by user_id]&lt;br/&gt;in: config fields + version&lt;br/&gt;out: latest config"]:::data
@@ -101,7 +101,7 @@ flowchart TD
 %% Ported from geo-radar-mcp (self-oauth.ts + auth.ts); login gate = GetCited
 %% Supabase session (not a shared password); clients/codes in Postgres.
 flowchart TD
-  CL["Claude / MCP client&lt;br/&gt;[DATA · external]&lt;br/&gt;in: server URL api/mcp&lt;br/&gt;out: HTTP requests"]:::data
+  CL["Claude / MCP client&lt;br/&gt;[DATA · external]&lt;br/&gt;in: server URL /mcp&lt;br/&gt;out: HTTP requests"]:::data
 
   DISC["GET .well-known/oauth-protected-resource&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: none&lt;br/&gt;out: resource + authorization_servers (this origin)"]:::fn
   META["GET .well-known/oauth-authorization-server&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: none&lt;br/&gt;out: authorize/token/register endpoints, PKCE S256"]:::fn
@@ -118,7 +118,7 @@ flowchart TD
 
   TOKEN["POST api/mcp/token&lt;br/&gt;[FUNCTION]&lt;br/&gt;in: code + code_verifier (PKCE S256, timing-safe)&lt;br/&gt;out: HS256 JWT · sub = user_id · 7d TTL"]:::fn
 
-  MCP["POST api/mcp (streamable HTTP, stateless)&lt;br/&gt;[FUNCTION · withMcpAuth]&lt;br/&gt;in: Bearer JWT or MCP_API_KEY&lt;br/&gt;out: tool results (401 + WWW-Authenticate if invalid)"]:::fn
+  MCP["POST /mcp (streamable HTTP, stateless)&lt;br/&gt;[FUNCTION · withMcpAuth]&lt;br/&gt;in: Bearer JWT or MCP_API_KEY&lt;br/&gt;out: tool results (401 + WWW-Authenticate if invalid)"]:::fn
   VERIFY{"Token valid?&lt;br/&gt;[FUNCTION · jwtVerify HS256, iss = this origin]"}:::dec
 
   TOOLS["Tools: ping · get_active_config · run_benchmark · get_report · build_plan&lt;br/&gt;[FUNCTION → lib/geo pipeline]&lt;br/&gt;in: args + user_id from JWT sub&lt;br/&gt;out: SoV, reports, costed plan"]:::fn

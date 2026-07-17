@@ -91,3 +91,23 @@ check the Base UI API, not Radix docs.
 **Root cause:** corp proxy re-signs TLS with a CA not in Node's bundled trust store.
 **Watch for later:** before any install, export
 `NODE_EXTRA_CA_CERTS`/`SSL_CERT_FILE=/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem`.
+
+## 2026-07-17 — A Next.js rewrite can NOT relocate the MCP endpoint to /mcp
+**What happened:** For the Render URL takeover we wanted the MCP endpoint served at /mcp
+(legacy connector URL) while keeping the route file under /api. A beforeFiles rewrite
+`/mcp → /api/mcp` (even accept-header-conditioned) fails for two independent reasons,
+verified empirically on next@16.2.10 in dev AND production mode:
+**Root cause:**
+- Middleware runs on the ORIGINAL URL before beforeFiles rewrites — with /mcp in
+  PROTECTED_PREFIXES, Claude's unauthenticated POST gets a 307 to /login, never the 401
+  challenge that starts OAuth.
+- Next preserves the original path in the handler's `request.url` after a rewrite, and
+  mcp-handler dispatches by STRICT pathname equality against its basePath-derived endpoint
+  (dist/index.js:279) — every rewritten call 404s, and only AFTER a fully successful OAuth
+  flow (withMcpAuth is path-agnostic), which makes it a nasty late failure.
+**Fix:** genuinely serve the endpoint at top level: `src/app/mcp/route.ts` + `basePath: ""`
+(deriveEndpointsFromBasePath("") → "/mcp"), page moved /mcp → /connector, middleware matcher
+excludes machine surfaces (mcp$|api/|\.well-known/|healthz$).
+**Watch for later:** anything that must answer at an exact public path (webhooks, OAuth
+metadata, MCP) needs a real route at that path — never a rewrite — and must be excluded
+from the session middleware.

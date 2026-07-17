@@ -2,12 +2,14 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /** Routes that require an authenticated user. Everything else is public. */
-const PROTECTED_PREFIXES = ["/configure", "/assistant", "/mcp", "/tracker", "/dashboard"];
+// NOTE: /mcp is NOT here — it is the MCP tool endpoint (bearer-token auth via
+// withMcpAuth); a session redirect there would break the connector OAuth flow.
+const PROTECTED_PREFIXES = ["/configure", "/assistant", "/connector", "/tracker", "/dashboard"];
 
 /**
  * Refreshes the Supabase auth session on every request (keeps cookies fresh) and
  * redirects unauthenticated users away from protected routes to /login. Called from
- * `src/middleware.ts`.
+ * `src/proxy.ts` (Next 16 proxy convention).
  */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

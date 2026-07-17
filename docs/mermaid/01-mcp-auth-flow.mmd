@@ -2,7 +2,7 @@
 %% Ported from geo-radar-mcp (self-oauth.ts + auth.ts); login gate = GetCited
 %% Supabase session (not a shared password); clients/codes in Postgres.
 flowchart TD
-  CL["Claude / MCP client<br/>[DATA · external]<br/>in: server URL api/mcp<br/>out: HTTP requests"]:::data
+  CL["Claude / MCP client<br/>[DATA · external]<br/>in: server URL /mcp<br/>out: HTTP requests"]:::data
 
   DISC["GET .well-known/oauth-protected-resource<br/>[FUNCTION]<br/>in: none<br/>out: resource + authorization_servers (this origin)"]:::fn
   META["GET .well-known/oauth-authorization-server<br/>[FUNCTION]<br/>in: none<br/>out: authorize/token/register endpoints, PKCE S256"]:::fn
@@ -19,7 +19,7 @@ flowchart TD
 
   TOKEN["POST api/mcp/token<br/>[FUNCTION]<br/>in: code + code_verifier (PKCE S256, timing-safe)<br/>out: HS256 JWT · sub = user_id · 7d TTL"]:::fn
 
-  MCP["POST api/mcp (streamable HTTP, stateless)<br/>[FUNCTION · withMcpAuth]<br/>in: Bearer JWT or MCP_API_KEY<br/>out: tool results (401 + WWW-Authenticate if invalid)"]:::fn
+  MCP["POST /mcp (streamable HTTP, stateless)<br/>[FUNCTION · withMcpAuth]<br/>in: Bearer JWT or MCP_API_KEY<br/>out: tool results (401 + WWW-Authenticate if invalid)"]:::fn
   VERIFY{"Token valid?<br/>[FUNCTION · jwtVerify HS256, iss = this origin]"}:::dec
 
   TOOLS["Tools: ping · get_active_config · run_benchmark · get_report · build_plan<br/>[FUNCTION → lib/geo pipeline]<br/>in: args + user_id from JWT sub<br/>out: SoV, reports, costed plan"]:::fn

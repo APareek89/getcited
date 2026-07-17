@@ -13,7 +13,10 @@ import { db, schema } from "@/lib/db/client";
  *                                              session, NOT a shared password → the
  *                                              issued token is BOUND to that user)
  *   Claude ─POST /api/mcp/token───────▶ us    (PKCE S256 verified → HS256 JWT)
- *   Claude ─POST /api/mcp  Bearer JWT─▶ us    (verify our own JWT; sub = user id)
+ *   Claude ─POST /mcp      Bearer JWT─▶ us    (verify our own JWT; sub = user id)
+ *
+ * The tool endpoint is TOP-LEVEL /mcp (not /api/mcp) so the deployed URL equals
+ * the legacy geo-radar connector URL https://geo-radar-mcp.onrender.com/mcp.
  *
  * Differences vs geo-radar: clients/codes live in Postgres (serverless-safe, not
  * in-memory Maps), and `sub` is the Supabase user id so MCP tools read that user's

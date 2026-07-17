@@ -2,7 +2,7 @@
 %% current as of Tracker build (plan approval → tracker_items → track_progress). MCP detail: 01-mcp-auth-flow.mmd
 flowchart TD
   U["User (signed in)<br/>[DATA · Supabase auth.users]<br/>in: email/Google login<br/>out: user_id"]:::data
-  MCPC["MCP connector (Claude etc.)<br/>[FUNCTION · api/mcp, OAuth+PKCE, JWT sub=user_id]<br/>see diagram 01"]:::fn
+  MCPC["MCP connector (Claude etc.)<br/>[FUNCTION · /mcp, OAuth+PKCE, JWT sub=user_id]<br/>see diagram 01"]:::fn
 
   CFG["Configure page<br/>[FUNCTION]<br/>in: brand URL, competitors x5, budget, team size<br/>out: versioned config row"]:::fn
   CFGDB["configs<br/>[DATA · Supabase/Drizzle, RLS by user_id]<br/>in: config fields + version<br/>out: latest config"]:::data

@@ -2,28 +2,27 @@ import { NextResponse, type NextRequest } from "next/server";
 import { publicOrigin } from "@/lib/mcp/auth";
 
 /**
- * RFC 9728 path-suffixed variant: clients may GET
- * /.well-known/oauth-protected-resource/api/mcp — same metadata as the root doc.
+ * RFC 9728 path-suffixed variant: clients connected to /mcp may GET
+ * /.well-known/oauth-protected-resource/mcp — same metadata as the root doc.
  */
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
+
 export async function GET(req: NextRequest) {
   const origin = publicOrigin(req);
   return NextResponse.json(
     {
-      resource: `${origin}/api/mcp`,
+      resource: `${origin}/mcp`,
       authorization_servers: [origin],
       bearer_methods_supported: ["header"],
     },
-    { headers: { "cache-control": "public, max-age=3600" } },
+    { headers: { "cache-control": "public, max-age=3600", ...CORS_HEADERS } },
   );
 }
 
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET, OPTIONS",
-      "access-control-allow-headers": "content-type",
-    },
-  });
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }

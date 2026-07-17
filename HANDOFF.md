@@ -23,10 +23,10 @@ text #EDF0F7 / muted #93A0B4, gradient accent for buttons/active pills/chart str
 **APPLIED to the app (2026-07-17)** — globals.css tokens + aurora glows on body + glass on all
 shadcn Cards + `.bg-aurora`/`.text-aurora`/`.glass` utilities; gradient accents on hero/CTA/active
 nav/SoV "you" bars/trend line. **Nav IA changed the same day:** left sidebar → TOP nav bar
-(`app-shell.tsx`): Configure · GEO Agent (/assistant) · **GEO MCP (/mcp — new page, MCP panel moved
-out of the assistant tabs)** · Dashboard. Assistant no longer has an Agent/MCP tab switcher.
-`/mcp` added to PROTECTED_PREFIXES. Also fixed missing `--color-danger` mapping (text-danger classes
-were silently no-oping).
+(`app-shell.tsx`): Configure · GEO Agent (/assistant) · **GEO MCP (page moved /mcp → `/connector`
+on 2026-07-17 — /mcp is now the MCP tool ENDPOINT, see Render migration below)** · Dashboard.
+Assistant no longer has an Agent/MCP tab switcher. `/connector` is in PROTECTED_PREFIXES. Also fixed
+missing `--color-danger` mapping (text-danger classes were silently no-oping).
 
 ## UI fix round 2 + Tracker (2026-07-17) — ALL SHIPPED, awaiting user live validation
 ✅ Shipped: nav tabs left of logo · opaque `.glass-header` (rgba(7,11,20,.85)+blur, z-50) · Configure
@@ -39,7 +39,7 @@ dates/why/how/guidelines) · PlanResult collapsed to summary + Word/PDF/Excel/HT
 `approve_plan` chat tool (agent asks after build_plan, only on explicit yes; idempotent),
 /tracker editable page (status dropdown + inline remarks via server action), `track_progress`
 reads tracker_items PRIMARY (re_benchmark:true optional+paid), MCP parity (`approve_plan` +
-`get_tracker` in /api/[transport]). Nav: Configure · GEO Agent · GEO MCP · Tracker · Dashboard.
+`get_tracker` in the MCP route). Nav: Configure · GEO Agent · GEO MCP · Tracker · Dashboard.
 
 ## Next session — pending points (2026-07-17)
 0. **User validates live** (all auth-gated): round-2 UI fixes (nav-left, header bleed on /dashboard,
@@ -48,7 +48,8 @@ reads tracker_items PRIMARY (re_benchmark:true optional+paid), MCP parity (`appr
 1. **Loop offer is OPEN** (Loop.MD status: offered) — ask once: turn the eval loop on?
 2. User may add keys: `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` (tracing) + `FIRECRAWL_API_KEY` (richer crawls).
 3. Candidate next features (PM backlog): content calendar view from roadmap, weekly digest email,
-   competitor-watch alerts, Vercel deploy (needed for installing the MCP connector in claude.ai).
+   competitor-watch alerts. Deploy = Render URL takeover (see "Render migration" section), replaces
+   the old "Vercel deploy" idea.
 4. FMEA smart-suggest fired this session (migration + auth/RLS + new tools + 200+ line diffs) —
    scan offered, user hasn't answered yet.
 
@@ -170,7 +171,14 @@ observability/logger (dropped in port — currently errors only surface as clien
   chips, empty-state → "Run your first benchmark".
 
 ## MCP connector (DONE — ported from geo-radar-mcp self-hosted OAuth)
-- **Endpoint:** `POST /api/mcp` (streamable HTTP, stateless, `mcp-handler` + `withMcpAuth`).
+- **Endpoint:** `POST /mcp` — TOP-LEVEL, `src/app/mcp/route.ts` with `basePath: ""` (moved from
+  /api/mcp on 2026-07-17 so the deployed URL equals the legacy connector URL
+  `https://geo-radar-mcp.onrender.com/mcp` — existing claude.ai connectors re-auth in place).
+  Streamable HTTP, stateless, `mcp-handler` + `withMcpAuth`. The UI page that lived at /mcp is now
+  `/connector`. Middleware matcher EXCLUDES `/mcp`, `/api/`, `/.well-known/`, `/healthz` (a session
+  307 on the endpoint would break the connector OAuth flow — verified empirically; a beforeFiles
+  rewrite can NOT do this job: middleware sees the pre-rewrite URL and mcp-handler matches pathname
+  strictly).
   Tools: ping, get_active_config, run_benchmark, get_report, build_plan — all scoped by JWT `sub` (user id)
   via `lib/mcp/data.ts` (Drizzle, every query user_id-scoped; MCP has no cookies → no RLS client).
 - **Auth (self-hosted OAuth, no external IdP):** DCR `POST /api/mcp/register` → `GET /api/mcp/authorize`
@@ -178,13 +186,49 @@ observability/logger (dropped in port — currently errors only surface as clien
   `POST /api/mcp/token` (PKCE S256, one-time DB-backed codes) → HS256 JWT signed with
   `OAUTH_SIGNING_SECRET`, iss/aud = deployment origin, 7d TTL, no refresh tokens. Static `MCP_API_KEY`
   bearer kept for scripts (no user context). Metadata: `/.well-known/oauth-authorization-server` +
-  `/.well-known/oauth-protected-resource` (+ path-suffixed variant). Tables `mcp_oauth_clients/codes`
-  (migration 0004, RLS deny-all, service-client only).
+  `/.well-known/oauth-protected-resource` (+ path-suffixed variant); both PR docs emit
+  `resource: ${origin}/mcp` and all three GETs send `Access-Control-Allow-Origin: *` (claude.ai web
+  fetches them from the browser; the live geo-radar server sends it — parity required). Tables
+  `mcp_oauth_clients/codes` (migration 0004, RLS deny-all, service-client only).
 - **Smoke-tested:** metadata docs, 401+WWW-Authenticate challenge, DCR, authorize→login redirect
   (flow preserved), open-redirect guard, initialize handshake, tools/list, ping, and a locally-signed
   JWT calling get_active_config as a synthetic user. Claude custom connectors need a public HTTPS URL —
   deploy (or tunnel) to install in claude.ai; the wiring derives issuer from the request origin.
 - **Diagrams:** `docs/mermaid/01-mcp-auth-flow.mmd` (+ master updated); viewer `docs/architecture-flow.html`.
+
+## Render migration — GetCited takes over https://geo-radar-mcp.onrender.com (2026-07-17, IN PROGRESS)
+Goal: the existing Render web service `geo-radar-mcp` (Blueprint-managed, Auth0-proxy OAuth, worker+
+Redis+Postgres siblings) starts serving GetCited at the SAME URL; claude.ai connectors pointing at
+`https://geo-radar-mcp.onrender.com/mcp` re-auth in place (Auth0 tokens die at cutover; users sign into
+GetCited once). geo-radar-mcp repo stays untouched (read-only).
+- **Code (Phase 1, this commit):** endpoint at top-level /mcp · page → /connector · middleware matcher
+  exclusions · resource=${origin}/mcp + CORS on well-known GETs · /healthz route (old service's
+  healthCheckPath) · `.node-version` 22.22.0 + `engines` + `packageManager pnpm@11.10.0` (Render
+  precedence: NODE_VERSION env > .node-version > engines; corepack needs packageManager; corepack is
+  gone in Node 25+).
+- **Render cutover (user/dashboard or Render API), IN ORDER:**
+  1. Disconnect the Blueprint FIRST (else a push to geo-radar re-asserts old config; disconnect never deletes services).
+  2. Grant Render's GitHub App access to private `APareek89/getcited`.
+  3. Env BEFORE Update Source — keep: ANTHROPIC_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY,
+     GROQ_API_KEY, PANEL_COST_CAP_USD_PER_RUN, MCP_API_KEY, PORT. Change: DATABASE_URL → Supabase
+     pooler (needed at BUILD time; old value points at geo-radar-db). Add: NEXT_PUBLIC_SUPABASE_URL,
+     NEXT_PUBLIC_SUPABASE_ANON_KEY (build-time), OAUTH_SIGNING_SECRET (⚠️ BEFORE cutover, a FRESH
+     random value — NEVER geo-radar's old one and NEVER equal to MCP_API_KEY. Two reasons: the
+     fallback signing key is MCP_API_KEY → static key becomes a user-impersonation forgery key; and
+     if old tokens still VERIFY (same origin issuer, aud never checked) stale connectors get tool
+     errors instead of the 401 that makes claude.ai re-auth — fresh secret → hard 401 → clean re-auth),
+     KEY_ENCRYPTION_SECRET (same value as local — shared DB, existing BYOK rows), NODE_VERSION=22.22.0.
+     Delete: OAUTH_MODE, OAUTH_ISSUER, OAUTH_AUDIENCE, MCP_TRANSPORT, REDIS_URL (+ any QUOTA_*/
+     PROVIDER_RATE_LIMIT_*/DASHBOARD_PUBLIC).
+  4. Settings → Build & Deploy → Update Source → `APareek89/getcited`@main; Build:
+     `corepack enable && pnpm install --frozen-lockfile && pnpm build`; Start: `pnpm start`.
+     healthCheckPath stays /healthz. Service name must stay `geo-radar-mcp` (URL derives from it).
+  5. Suspend/delete `geo-radar-worker` + `geo-radar-redis` (worker crash-loops on new repo). KEEP `geo-radar-db`.
+  6. Supabase → Auth → URL Configuration: add `https://geo-radar-mcp.onrender.com/auth/callback` to redirect allow-list.
+  7. Render free tier spins down after 15 min (~60s cold start → first MCP call after idle times out) — user upgrading to Starter.
+- **Post-deploy smoke (from here):** well-known docs (resource host + CORS), POST /mcp 401 challenge,
+  DCR register, /healthz, then user re-auths the connector in claude.ai and runs ping/get_active_config.
+- **Rollback:** Update Source back to the old repo (or reconnect Blueprint) — old repo + DB unmodified.
 
 ## v1.1 (user-feedback round, 2026-07-16 evening) — DONE
 - **Memory**: `memories` table (working/procedural/structural), injected into the agent system

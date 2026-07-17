@@ -8,8 +8,11 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except static assets and image files.
+  // Run on everything except static assets/images AND the machine-facing
+  // surfaces: /mcp (MCP endpoint — bearer auth, a session 307 would kill the
+  // connector OAuth flow), /api (route handlers manage their own auth),
+  // /.well-known (public OAuth discovery docs) and /healthz (Render checks).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|mcp$|api/|\\.well-known/|healthz$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
