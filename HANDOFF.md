@@ -28,6 +28,34 @@ out of the assistant tabs)** · Dashboard. Assistant no longer has an Agent/MCP 
 `/mcp` added to PROTECTED_PREFIXES. Also fixed missing `--color-danger` mapping (text-danger classes
 were silently no-oping).
 
+## UI fix round 2 + Tracker (user feedback 2026-07-17 from live screenshots) — DO THESE FIRST
+1. **Configure layout** (`src/app/(app)/configure/page.tsx` + `components/configure/*`): too much dead
+   space. Split into TWO columns — left "Business" (brand/competitors/queries/budget), right "Platform"
+   (We Serve/Self Serve + BYOK). Compact the cards; page must fit the viewport with NO scrolling unless
+   the user adds extra competitors/queries (start with 3 visible rows + Add).
+2. **Top nav alignment** (`components/app-shell.tsx`): tabs go LEFT, next to the GetCited logo (remove
+   justify-center).
+3. **Dashboard nav bug** (screenshot: KPI numbers bleed through the header): sticky `.glass` header is
+   too transparent + stacking-context issue. Fix: header background rgba(7,11,20,~0.85) + blur, z-50,
+   verify content scrolls UNDER it on /dashboard.
+4. **GEO Agent chat width** (`components/assistant/assistant-view.tsx`): messages container max-w-2xl
+   is too narrow — widen the CONTENT area (e.g. max-w-4xl/5xl) but KEEP the composer + starter-cards
+   block at its current width.
+5. **Detailed plan doc**: chat shows a SUMMARY only (collapse PlanResult); the full plan becomes a
+   downloadable **DOCX** (new: `docx` npm pkg; extend `/api/report/plan/[planId]` with format=docx) +
+   existing PDF/Excel. Plan content must be practical & detailed per tactic: WHAT (action), WHY
+   (gap/evidence), HOW (step-by-step guidelines), WHO (owner role), TIMELINE (week-by-week with dates
+   from plan creation), plus general execution guidelines. Extend roadmap.ts generation accordingly.
+6. **New "Tracker" tab** (nav: Configure · GEO Agent · GEO MCP · Tracker · Dashboard):
+   - Approval flow: after build_plan the agent ASKS "approve this plan into your Tracker?" →
+     new `approve_plan` tool writes tracker rows (also MCP parity per standing rule).
+   - New table `tracker_items` (migration 0006, RLS owner-only): id, user_id, plan_id, week,
+     due_date (derived from plan creation + week), action, owner_role, hours, deliverable,
+     status (not_started|in_progress|done|blocked — dropdown), remarks (user-editable), updated_at.
+   - /tracker page: editable table (status dropdown + remarks inline edit, save via server action).
+   - `track_progress` tool now reads tracker_items (status+remarks) as the PRIMARY source for
+     "how am I progressing", plus optional re-benchmark for measured impact.
+
 ## Next session — pending points (2026-07-17)
 0. **User validates the Aurora Glass re-theme + top nav live** (sign in; check Configure/GEO Agent/
    GEO MCP/Dashboard render well as glass; report any contrast/spacing misses — mockup refs in docs/design-refs/).
