@@ -14,6 +14,14 @@
 - At the **start of each phase**, tell the user exactly which `.env.local` keys it needs.
 - Do **not** edit the reference project `geo-radar-mcp` — read-only port source.
 
+## Design direction (LOCKED 2026-07-17 via /design-shotgun)
+**Aurora Glass, app-wide**: bg #070B14 + violet #7C3AED → cyan #22D3EE aurora glows (blurred radials),
+frosted glass cards (rgba(255,255,255,.05) + blur(20px) + 1px rgba(255,255,255,.12) border, radius 20px),
+text #EDF0F7 / muted #93A0B4, gradient accent for buttons/active pills/chart strokes. Reference mockups:
+`~/.gstack/projects/APareek89-getcited/designs/{landing,configure,assistant,dashboard}-20260717/variant-C.png`
+(+ HTML sources /tmp/gcC-*.html, /tmp/gc-configure-C.html — copy into repo before /tmp is cleared).
+NOT yet applied to app code (user constraint during exploration).
+
 ## Next session — pending points (2026-07-17)
 1. **User validates v1.1 live**: re-save Configure (old competitors are URLs → hit "Suggest competitors",
    set real budget/team), run "How can I improve?" card, check roadmap + PDF, try generate_content + upload.

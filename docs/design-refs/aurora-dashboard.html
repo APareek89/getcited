@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GetCited — Dashboard</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1440px;height:900px;overflow:hidden}
+  body{background:#070B14;color:#EDF0F7;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;position:relative;display:flex;gap:14px;padding:20px}
+  .glow{position:fixed;border-radius:50%;pointer-events:none;filter:blur(120px);z-index:0}
+  .g1{width:680px;height:680px;background:#7C3AED;opacity:.32;top:-260px;left:-160px}
+  .g2{width:640px;height:640px;background:#22D3EE;opacity:.24;bottom:-260px;right:-200px}
+  .g3{width:440px;height:440px;background:#22D3EE;opacity:.12;top:-180px;left:52%}
+  .glass{background:rgba(255,255,255,.05);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);border-radius:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 60px rgba(0,0,0,.35)}
+  .col-nav{position:relative;z-index:1;width:210px;flex-shrink:0;display:flex;flex-direction:column;padding:20px 14px 16px}
+  .logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:-.01em;padding:0 6px}
+  .dot{width:13px;height:13px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#22D3EE);box-shadow:0 0 14px rgba(124,58,237,.85),0 0 26px rgba(34,211,238,.45)}
+  .nav-label{font-size:9.5px;font-weight:700;letter-spacing:.15em;color:#5E6A7E;margin:26px 0 10px 12px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font-size:13.5px;font-weight:500;color:#93A0B4;margin-bottom:6px}
+  .nav-item svg{flex-shrink:0}
+  .nav-item.active{background:linear-gradient(90deg,#7C3AED,#22D3EE);color:#fff;font-weight:600;box-shadow:0 8px 24px rgba(124,58,237,.45)}
+  .userchip{margin-top:auto;display:flex;align-items:center;gap:9px;padding:12px 8px 2px;border-top:1px solid rgba(255,255,255,.08)}
+  .avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+  .email{font-size:11.5px;color:#93A0B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .main{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;min-width:0}
+  .title-row{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 0}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .runchip{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#93A0B4;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 16px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  .runchip b{color:#DDE3EE;font-weight:600}
+  .pulse{width:7px;height:7px;border-radius:50%;background:#34D399;box-shadow:0 0 10px rgba(52,211,153,.8)}
+  .kpis{display:flex;gap:14px;margin-top:14px}
+  .kpi{flex:1;padding:16px 18px;border-radius:18px}
+  .kpi .k{font-size:10.5px;font-weight:700;letter-spacing:.12em;color:#7C8698;text-transform:uppercase}
+  .kpi .vrow{display:flex;align-items:center;gap:10px;margin-top:8px}
+  .kpi .v{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .kpi .v.pos{font-size:25px;color:#34D399}
+  .delta{font-size:11px;font-weight:700;color:#34D399;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);border-radius:999px;padding:3px 9px;box-shadow:0 0 16px rgba(52,211,153,.3)}
+  .kpi .s{font-size:11.5px;color:#7C8698;margin-top:7px}
+  .midrow{display:flex;gap:16px;margin-top:16px}
+  .trend{flex:2.15;padding:18px 22px 12px;border-radius:20px;min-width:0}
+  .card-head{display:flex;align-items:center;justify-content:space-between}
+  .card-title{font-size:14px;font-weight:700}
+  .card-side{font-size:11.5px;color:#7C8698}
+  .trend svg{display:block;width:100%;height:296px;margin-top:6px}
+  .lead{flex:1;padding:18px 22px;border-radius:20px}
+  .bar-row{margin-top:15px}
+  .bar-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-bottom:6px}
+  .bar-name{display:flex;align-items:center;gap:8px;color:#C7CFDD;font-weight:500}
+  .rank{width:16px;font-size:11px;font-weight:700;color:#5E6A7E}
+  .you{font-size:8.5px;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:999px;background:linear-gradient(90deg,#7C3AED,#22D3EE);color:#fff;box-shadow:0 0 12px rgba(124,58,237,.6)}
+  .bar-pct{color:#EDF0F7;font-weight:600}
+  .track{height:8px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+  .fill{height:100%;border-radius:999px}
+  .fill.white{background:rgba(255,255,255,.2)}
+  .fill.grad{background:linear-gradient(90deg,#7C3AED,#22D3EE);box-shadow:0 0 16px rgba(124,58,237,.7),0 0 24px rgba(34,211,238,.4)}
+  .lead-note{margin-top:18px;font-size:11px;color:#5E6A7E}
+  .bottomrow{display:flex;gap:16px;margin-top:16px;flex:1;min-height:0}
+  .plan{flex:1.25;padding:20px 24px;border-radius:20px}
+  .k-label{font-size:10.5px;font-weight:700;letter-spacing:.13em;color:#7C8698;text-transform:uppercase}
+  .ontrack{font-size:11px;font-weight:700;color:#34D399;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);border-radius:999px;padding:3px 10px;box-shadow:0 0 16px rgba(52,211,153,.3)}
+  .plan-headline{margin-top:12px;font-size:23px;font-weight:800;letter-spacing:-.02em}
+  .grad-text{background:linear-gradient(90deg,#7C3AED,#22D3EE);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .plan-sub{margin-top:6px;font-size:12px;color:#7C8698}
+  .prog-row{display:flex;justify-content:space-between;margin-top:16px;font-size:11.5px;color:#93A0B4;margin-bottom:7px}
+  .dl-chips{display:flex;gap:10px;margin-top:18px}
+  .dl{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(90deg,#7C3AED,#22D3EE);border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;color:#fff;box-shadow:0 6px 18px rgba(124,58,237,.4)}
+  .docs{flex:1;padding:18px 22px 12px;border-radius:20px}
+  .doc{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid rgba(255,255,255,.07)}
+  .doc:last-child{border-bottom:none}
+  .ftag{font-size:9px;font-weight:800;letter-spacing:.08em;color:#B9C2D2;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:4px 0;width:36px;text-align:center;flex-shrink:0}
+  .dname{flex:1;font-size:13px;font-weight:500;color:#DDE3EE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ddate{font-size:11.5px;color:#7C8698}
+  .dl-ic{width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+
+<nav class="col-nav glass">
+  <div class="logo"><span class="dot"></span>GetCited</div>
+  <div class="nav-label">WORKSPACE</div>
+  <div class="nav-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>Configure</div>
+  <div class="nav-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 3l1.9 5.4 5.6 1.6-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6z"/><path d="M18.6 15.2l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>GEO Assistant</div>
+  <div class="nav-item active"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>Dashboard</div>
+  <div class="userchip"><span class="avatar">A</span><span class="email">anand@pixelbin.io</span></div>
+</nav>
+
+<main class="main">
+  <div class="title-row">
+    <h1>Dashboard</h1>
+    <div class="runchip"><span class="pulse"></span><b>PixelBin</b>&nbsp;· last run Jul 17</div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi glass"><div class="k">Share of voice</div><div class="vrow"><span class="v">33%</span><span class="delta">+5 pts</span></div><div class="s">of AI answers mention PixelBin</div></div>
+    <div class="kpi glass"><div class="k">Citation share</div><div class="vrow"><span class="v">21%</span></div><div class="s">of cited sources are yours</div></div>
+    <div class="kpi glass"><div class="k">Sentiment</div><div class="vrow"><span class="v pos">Positive</span></div><div class="s">across 42 brand mentions</div></div>
+    <div class="kpi glass"><div class="k">Hallucinations</div><div class="vrow"><span class="v">0</span></div><div class="s">flagged this run</div></div>
+  </div>
+
+  <div class="midrow">
+    <div class="trend glass">
+      <div class="card-head"><span class="card-title">Share-of-voice trend</span><span class="card-side">May 29 – Jul 17 · weekly runs</span></div>
+      <svg viewBox="0 0 748 300" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+          <linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22D3EE" stop-opacity=".16"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></linearGradient>
+          <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+        </defs>
+        <g stroke="rgba(255,255,255,.06)" stroke-width="1">
+          <line x1="44" y1="20" x2="742" y2="20"/>
+          <line x1="44" y1="80" x2="742" y2="80"/>
+          <line x1="44" y1="140" x2="742" y2="140"/>
+          <line x1="44" y1="200" x2="742" y2="200"/>
+          <line x1="44" y1="260" x2="742" y2="260"/>
+        </g>
+        <g fill="#5E6A7E" font-family="Inter,-apple-system,sans-serif" font-size="10" text-anchor="end">
+          <text x="34" y="24">40%</text><text x="34" y="84">30%</text><text x="34" y="144">20%</text><text x="34" y="204">10%</text><text x="34" y="264">0</text>
+        </g>
+        <path d="M44,230 L143,218 L243,206 L342,176 L442,182 L541,146 L641,104 L740,62 L740,260 L44,260 Z" fill="url(#area)"/>
+        <polyline points="44,230 143,218 243,206 342,176 442,182 541,146 641,104 740,62" fill="none" stroke="url(#lg)" stroke-width="6" opacity=".38" filter="url(#soft)"/>
+        <polyline points="44,230 143,218 243,206 342,176 442,182 541,146 641,104 740,62" fill="none" stroke="url(#lg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="740" cy="62" r="10" fill="#22D3EE" opacity=".22"/>
+        <circle cx="740" cy="62" r="4.5" fill="#22D3EE" stroke="#0B1120" stroke-width="2"/>
+        <rect x="688" y="30" width="46" height="23" rx="8" fill="rgba(34,211,238,.12)" stroke="rgba(34,211,238,.4)"/>
+        <text x="711" y="46" fill="#EDF0F7" font-family="Inter,-apple-system,sans-serif" font-size="12" font-weight="700" text-anchor="middle">33%</text>
+        <g fill="#5E6A7E" font-family="Inter,-apple-system,sans-serif" font-size="10" text-anchor="middle">
+          <text x="143" y="288">Jun 5</text><text x="342" y="288">Jun 19</text><text x="541" y="288">Jul 3</text><text x="726" y="288">Jul 17</text>
+        </g>
+      </svg>
+    </div>
+    <div class="lead glass">
+      <div class="card-head"><span class="card-title">Competitor leaderboard</span></div>
+      <div class="bar-row">
+        <div class="bar-head"><span class="bar-name"><span class="rank">1</span>Cloudinary</span><span class="bar-pct">50%</span></div>
+        <div class="track"><div class="fill white" style="width:50%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-head"><span class="bar-name"><span class="rank">2</span>PixelBin<span class="you">YOU</span></span><span class="bar-pct">33%</span></div>
+        <div class="track"><div class="fill grad" style="width:33%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-head"><span class="bar-name"><span class="rank">3</span>ImageKit</span><span class="bar-pct">17%</span></div>
+        <div class="track"><div class="fill white" style="width:17%"></div></div>
+      </div>
+      <div class="lead-note">240 prompts · 4 assistants · refreshed weekly</div>
+    </div>
+  </div>
+
+  <div class="bottomrow">
+    <div class="plan glass">
+      <div class="card-head"><span class="k-label">Active plan</span><span class="ontrack">On track</span></div>
+      <div class="plan-headline"><span class="grad-text">5% → 22%</span> in 8 weeks</div>
+      <div class="plan-sub">Perplexity citation share target · $4.8k budget · started Jun 26</div>
+      <div class="prog-row"><span>Week 3 of 8</span><span>37%</span></div>
+      <div class="track"><div class="fill grad" style="width:37%"></div></div>
+      <div class="dl-chips">
+        <span class="dl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/><path d="M5 20h14"/></svg>PDF</span>
+        <span class="dl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/><path d="M5 20h14"/></svg>Excel</span>
+        <span class="dl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/><path d="M5 20h14"/></svg>HTML</span>
+      </div>
+    </div>
+    <div class="docs glass">
+      <div class="card-head"><span class="card-title">Plan documents</span><span class="card-side">4 files</span></div>
+      <div style="margin-top:6px">
+        <div class="doc"><span class="ftag">PDF</span><span class="dname">GEO Action Plan — v2</span><span class="ddate">Jul 17</span><span class="dl-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93A0B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/></svg></span></div>
+        <div class="doc"><span class="ftag">XLS</span><span class="dname">Citation Gap Analysis</span><span class="ddate">Jul 10</span><span class="dl-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93A0B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/></svg></span></div>
+        <div class="doc"><span class="ftag">HTM</span><span class="dname">Comparison Content Briefs</span><span class="ddate">Jul 3</span><span class="dl-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93A0B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/></svg></span></div>
+        <div class="doc"><span class="ftag">PDF</span><span class="dname">Baseline Audit Report</span><span class="ddate">Jun 26</span><span class="dl-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93A0B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/></svg></span></div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

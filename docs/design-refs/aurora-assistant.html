@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GetCited — GEO Assistant</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1440px;height:900px;overflow:hidden}
+  body{background:#070B14;color:#EDF0F7;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;position:relative;display:flex;gap:14px;padding:20px}
+  .glow{position:fixed;border-radius:50%;pointer-events:none;filter:blur(120px);z-index:0}
+  .g1{width:680px;height:680px;background:#7C3AED;opacity:.32;top:-260px;left:-160px}
+  .g2{width:640px;height:640px;background:#22D3EE;opacity:.24;bottom:-240px;right:-200px}
+  .g3{width:440px;height:440px;background:#7C3AED;opacity:.14;bottom:-200px;left:40%}
+  .glass{background:rgba(255,255,255,.05);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);border-radius:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 60px rgba(0,0,0,.35)}
+  .col-nav{position:relative;z-index:1;width:210px;flex-shrink:0;display:flex;flex-direction:column;padding:20px 14px 16px}
+  .logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:-.01em;padding:0 6px}
+  .dot{width:13px;height:13px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#22D3EE);box-shadow:0 0 14px rgba(124,58,237,.85),0 0 26px rgba(34,211,238,.45)}
+  .nav-label{font-size:9.5px;font-weight:700;letter-spacing:.15em;color:#5E6A7E;margin:26px 0 10px 12px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font-size:13.5px;font-weight:500;color:#93A0B4;margin-bottom:6px}
+  .nav-item svg{flex-shrink:0}
+  .nav-item.active{background:linear-gradient(90deg,#7C3AED,#22D3EE);color:#fff;font-weight:600;box-shadow:0 8px 24px rgba(124,58,237,.45)}
+  .userchip{margin-top:auto;display:flex;align-items:center;gap:9px;padding:12px 8px 2px;border-top:1px solid rgba(255,255,255,.08)}
+  .avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+  .email{font-size:11.5px;color:#93A0B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .col-threads{position:relative;z-index:1;width:258px;flex-shrink:0;padding:18px 12px;display:flex;flex-direction:column}
+  .threads-head{display:flex;align-items:center;justify-content:space-between;padding:0 6px 0 8px;margin-bottom:12px}
+  .threads-title{font-size:15px;font-weight:700}
+  .new-btn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:#C7CFDD;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:5px 11px}
+  .thread{padding:11px 12px;border-radius:12px;margin-bottom:4px;border:1px solid transparent}
+  .thread.active{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1)}
+  .thread .t{font-size:13px;font-weight:600;color:#DDE3EE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thread .d{font-size:11px;color:#7C8698;margin-top:3px}
+  .col-chat{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+  .chat-head{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .chat-title{font-size:14px;font-weight:600}
+  .live{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#7C8698}
+  .pulse{width:7px;height:7px;border-radius:50%;background:#34D399;box-shadow:0 0 10px rgba(52,211,153,.8)}
+  .msgs{flex:1;padding:26px 30px 8px;display:flex;flex-direction:column;overflow:hidden}
+  .bubble-user{align-self:flex-end;max-width:430px;background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(34,211,238,.18));border:1px solid rgba(167,139,250,.32);border-radius:16px 16px 4px 16px;padding:12px 16px;font-size:13.5px;line-height:1.55}
+  .ai-meta{display:flex;align-items:center;gap:8px;margin:24px 0 10px;font-size:11.5px;color:#7C8698}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#22D3EE);box-shadow:0 0 10px rgba(124,58,237,.8)}
+  .ai-text{max-width:640px;font-size:14px;line-height:1.7;color:#CBD3E1}
+  .ai-text b{color:#EDF0F7;font-weight:600}
+  .result{margin-top:14px;width:540px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:18px 20px 16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 46px rgba(124,58,237,.16)}
+  .result-head{display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;letter-spacing:.13em;color:#7C8698;text-transform:uppercase}
+  .bar-row{margin-top:12px}
+  .bar-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-bottom:6px}
+  .bar-name{display:flex;align-items:center;gap:8px;color:#C7CFDD;font-weight:500}
+  .you{font-size:8.5px;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:999px;background:linear-gradient(90deg,#7C3AED,#22D3EE);color:#fff;box-shadow:0 0 12px rgba(124,58,237,.6)}
+  .bar-pct{color:#EDF0F7;font-weight:600}
+  .track{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+  .fill{height:100%;border-radius:999px}
+  .fill.white{background:rgba(255,255,255,.2)}
+  .fill.grad{background:linear-gradient(90deg,#7C3AED,#22D3EE);box-shadow:0 0 16px rgba(124,58,237,.7),0 0 24px rgba(34,211,238,.4)}
+  .chips{display:flex;gap:10px;margin-top:16px}
+  .chip{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:9px 12px}
+  .chip .k{font-size:9.5px;font-weight:700;letter-spacing:.12em;color:#7C8698;text-transform:uppercase}
+  .chip .v{font-size:15px;font-weight:700;margin-top:3px}
+  .chip .v.pos{color:#34D399}
+  .starters{display:flex;gap:10px;padding:0 20px 12px}
+  .starter{flex:1;text-align:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:11px 8px;font-size:12px;font-weight:500;color:#B9C2D2;white-space:nowrap;overflow:hidden;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  .composer{margin:0 20px 18px;display:flex;align-items:center;gap:12px;background:rgba(10,15,26,.65);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:10px 12px 10px 16px;box-shadow:0 16px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
+  .composer .ph{flex:1;font-size:13.5px;color:#5E6A7E}
+  .model-chip{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:#C7CFDD;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 12px}
+  .model-chip .sp{background:linear-gradient(90deg,#7C3AED,#22D3EE);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-size:11px}
+  .send{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#22D3EE);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(124,58,237,.55),0 6px 20px rgba(34,211,238,.3);flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+
+<nav class="col-nav glass">
+  <div class="logo"><span class="dot"></span>GetCited</div>
+  <div class="nav-label">WORKSPACE</div>
+  <div class="nav-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>Configure</div>
+  <div class="nav-item active"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 3l1.9 5.4 5.6 1.6-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6z"/><path d="M18.6 15.2l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>GEO Assistant</div>
+  <div class="nav-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>Dashboard</div>
+  <div class="userchip"><span class="avatar">A</span><span class="email">anand@pixelbin.io</span></div>
+</nav>
+
+<aside class="col-threads glass">
+  <div class="threads-head"><span class="threads-title">Threads</span><span class="new-btn"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New</span></div>
+  <div class="thread active"><div class="t">PixelBin benchmark run</div><div class="d">Jul 17 · 12 messages</div></div>
+  <div class="thread"><div class="t">Lift Perplexity citations</div><div class="d">Jul 16 · 8 messages</div></div>
+  <div class="thread"><div class="t">Q3 GEO content strategy</div><div class="d">Jul 14 · 21 messages</div></div>
+  <div class="thread"><div class="t">Cloudinary teardown</div><div class="d">Jul 11 · 5 messages</div></div>
+</aside>
+
+<main class="col-chat glass">
+  <div class="chat-head"><span class="chat-title">PixelBin benchmark run</span><span class="live"><span class="pulse"></span>Live data · Jul 17</span></div>
+  <div class="msgs">
+    <div class="bubble-user">Where do I stand against Cloudinary and ImageKit right now?</div>
+    <div class="ai-meta"><span class="ai-dot"></span>GEO Assistant · just now</div>
+    <div class="ai-text">You're <b>#2 of 3</b> in AI share of voice for image-API queries. Cloudinary leads at <b>50%</b>, you hold <b>33%</b>, and ImageKit trails at <b>17%</b>. Most of your gap sits on Perplexity comparison prompts — that's where Cloudinary earns 8 of its 12 extra citations. Here's your latest benchmark:</div>
+    <div class="result">
+      <div class="result-head"><span>Benchmark</span><span>Jul 17 run</span></div>
+      <div class="bar-row">
+        <div class="bar-head"><span class="bar-name">Cloudinary</span><span class="bar-pct">50%</span></div>
+        <div class="track"><div class="fill white" style="width:50%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-head"><span class="bar-name">PixelBin<span class="you">YOU</span></span><span class="bar-pct">33%</span></div>
+        <div class="track"><div class="fill grad" style="width:33%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-head"><span class="bar-name">ImageKit</span><span class="bar-pct">17%</span></div>
+        <div class="track"><div class="fill white" style="width:17%"></div></div>
+      </div>
+      <div class="chips">
+        <div class="chip"><div class="k">SoV</div><div class="v">33%</div></div>
+        <div class="chip"><div class="k">Citations</div><div class="v">21%</div></div>
+        <div class="chip"><div class="k">Sentiment</div><div class="v pos">+</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="starters">
+    <div class="starter">Where do I stand?</div>
+    <div class="starter">Why am I here?</div>
+    <div class="starter">How can I improve?</div>
+    <div class="starter">Where can I get to?</div>
+    <div class="starter">How am I progressing?</div>
+  </div>
+  <div class="composer">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#93A0B4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+    <span class="ph">Ask anything about your AI visibility…</span>
+    <span class="model-chip"><span class="sp">✦</span>Sonnet</span>
+    <span class="send"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span>
+  </div>
+</main>
+</body>
+</html>

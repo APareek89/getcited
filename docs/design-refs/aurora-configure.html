@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1440px; height:900px; overflow:hidden; }
+  body {
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    background:#070B14; color:#fff; position:relative;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---------- Aurora glow ---------- */
+  .aurora { position:absolute; inset:0; overflow:hidden; z-index:0; }
+  .blob { position:absolute; border-radius:50%; filter:blur(110px); }
+  .b1 { width:760px; height:620px; right:-220px; top:-260px;
+        background:radial-gradient(circle at 40% 60%, rgba(139,92,246,.55), rgba(139,92,246,0) 70%); }
+  .b2 { width:680px; height:560px; right:-60px; top:-120px;
+        background:radial-gradient(circle at 50% 40%, rgba(34,211,238,.38), rgba(34,211,238,0) 70%); }
+  .b3 { width:520px; height:420px; right:340px; top:-300px;
+        background:radial-gradient(circle at 50% 50%, rgba(168,85,247,.30), rgba(168,85,247,0) 70%); }
+  .b4 { width:600px; height:500px; left:-280px; bottom:-340px;
+        background:radial-gradient(circle at 50% 50%, rgba(99,102,241,.16), rgba(99,102,241,0) 70%); }
+  .grain { position:absolute; inset:0; z-index:1; pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,.014) 1px, transparent 1px);
+    background-size:3px 3px; }
+
+  .app { position:relative; z-index:2; display:flex; width:1440px; height:900px; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    width:252px; height:860px; margin:20px 0 20px 20px; padding:22px 16px;
+    background:linear-gradient(160deg, rgba(255,255,255,.055), rgba(255,255,255,.02));
+    backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+    border:1px solid rgba(255,255,255,.10); border-radius:20px;
+    display:flex; flex-direction:column;
+    box-shadow:0 24px 60px rgba(0,0,0,.45);
+  }
+  .brand { display:flex; align-items:center; gap:11px; padding:2px 6px 20px;
+           border-bottom:1px solid rgba(255,255,255,.07); }
+  .logo {
+    width:38px; height:38px; border-radius:12px; flex:none;
+    background:linear-gradient(135deg,#8B5CF6 0%,#6366F1 45%,#22D3EE 100%);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 22px rgba(139,92,246,.55), 0 0 40px rgba(34,211,238,.25);
+    font-weight:800; font-size:20px; letter-spacing:-1px;
+  }
+  .brand-name { font-size:17px; font-weight:700; letter-spacing:-.3px; }
+  .brand-sub { font-size:10.5px; color:rgba(255,255,255,.45); font-weight:500; margin-top:1px; }
+
+  .nav { margin-top:18px; display:flex; flex-direction:column; gap:6px; }
+  .nav-label { font-size:10px; font-weight:600; letter-spacing:1.4px; color:rgba(255,255,255,.32);
+               text-transform:uppercase; padding:0 10px 6px; }
+  .nav-item {
+    display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:12px;
+    font-size:13.5px; font-weight:500; color:rgba(255,255,255,.60);
+  }
+  .nav-item svg { width:17px; height:17px; stroke:rgba(255,255,255,.55); flex:none; }
+  .nav-item.active {
+    background:linear-gradient(92deg, rgba(139,92,246,.85), rgba(79,111,238,.80) 55%, rgba(34,211,238,.75));
+    color:#fff; font-weight:600;
+    box-shadow:0 6px 24px rgba(120,100,246,.45), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .nav-item.active svg { stroke:#fff; }
+  .sb-footer { margin-top:auto; }
+  .usage {
+    padding:12px 13px; border-radius:14px; margin-bottom:14px;
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+  }
+  .usage-top { display:flex; justify-content:space-between; font-size:11px; font-weight:600;
+               color:rgba(255,255,255,.65); margin-bottom:8px; }
+  .usage-top b { color:#fff; font-weight:600; }
+  .bar { height:5px; border-radius:99px; background:rgba(255,255,255,.09); overflow:hidden; }
+  .bar i { display:block; height:100%; width:62%; border-radius:99px;
+           background:linear-gradient(90deg,#8B5CF6,#22D3EE);
+           box-shadow:0 0 10px rgba(34,211,238,.6); }
+  .user { display:flex; align-items:center; gap:10px; padding:6px 6px 0;
+          border-top:1px solid rgba(255,255,255,.07); padding-top:14px; }
+  .avatar { width:30px; height:30px; border-radius:50%; flex:none;
+            background:linear-gradient(135deg,#8B5CF6,#22D3EE);
+            display:flex; align-items:center; justify-content:center;
+            font-size:11.5px; font-weight:700; }
+  .user-meta { font-size:12px; font-weight:600; }
+  .user-meta span { display:block; font-size:10.5px; color:rgba(255,255,255,.42); font-weight:500; margin-top:1px; }
+
+  /* ---------- Main ---------- */
+  .main { flex:1; padding:34px 36px 24px 30px; display:flex; flex-direction:column; }
+  .page-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:22px; }
+  .title { font-size:26px; font-weight:700; letter-spacing:-.6px; }
+  .subtitle { font-size:13px; color:rgba(255,255,255,.50); margin-top:5px; font-weight:400; }
+  .head-badge {
+    display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600;
+    color:rgba(255,255,255,.72); padding:8px 14px; border-radius:99px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10);
+    backdrop-filter:blur(12px);
+  }
+  .dot { width:7px; height:7px; border-radius:50%; background:#22D3EE; box-shadow:0 0 8px #22D3EE; }
+
+  .grid { display:grid; grid-template-columns: 596px 1fr; gap:22px; flex:1; align-content:start; }
+  .col { display:flex; flex-direction:column; gap:22px; min-width:0; }
+
+  .card {
+    background:linear-gradient(155deg, rgba(255,255,255,.06), rgba(255,255,255,.022));
+    backdrop-filter:blur(26px); -webkit-backdrop-filter:blur(26px);
+    border:1px solid rgba(255,255,255,.10); border-radius:20px;
+    padding:20px 22px; box-shadow:0 24px 60px rgba(0,0,0,.40);
+  }
+  .card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:15px; }
+  .card-title { display:flex; align-items:center; gap:9px; font-size:14.5px; font-weight:600; letter-spacing:-.2px; }
+  .card-ico { width:26px; height:26px; border-radius:8px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, rgba(139,92,246,.30), rgba(34,211,238,.22));
+    border:1px solid rgba(255,255,255,.12); }
+  .card-ico svg { width:13px; height:13px; stroke:#C4B5FD; }
+  .hint { font-size:11px; color:rgba(255,255,255,.38); font-weight:500; }
+
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:11px; font-weight:600; color:rgba(255,255,255,.52);
+                 margin-bottom:6px; letter-spacing:.2px; }
+  .input {
+    width:100%; padding:10px 13px; border-radius:11px; font-size:13px; font-weight:500;
+    background:rgba(7,11,20,.55); border:1px solid rgba(255,255,255,.09);
+    color:rgba(255,255,255,.88); font-family:'Inter',sans-serif;
+  }
+  .input.focus { border-color:rgba(139,92,246,.65); box-shadow:0 0 0 3px rgba(139,92,246,.16), 0 0 18px rgba(139,92,246,.18); }
+  .input .ph { color:rgba(255,255,255,.30); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .textarea { min-height:58px; line-height:1.5; font-weight:400; color:rgba(255,255,255,.75); }
+
+  /* competitors */
+  .comp-row { display:flex; align-items:center; gap:11px; padding:8.5px 12px; border-radius:11px;
+    background:rgba(7,11,20,.45); border:1px solid rgba(255,255,255,.07); margin-bottom:8px; }
+  .fav { width:22px; height:22px; border-radius:7px; flex:none; display:flex; align-items:center;
+         justify-content:center; font-size:10px; font-weight:700; }
+  .f1{background:rgba(139,92,246,.30); color:#C4B5FD;} .f2{background:rgba(34,211,238,.22); color:#67E8F9;}
+  .f3{background:rgba(236,72,153,.22); color:#F9A8D4;} .f4{background:rgba(99,102,241,.28); color:#A5B4FC;}
+  .f5{background:rgba(16,185,129,.20); color:#6EE7B7;}
+  .comp-name { font-size:12.5px; font-weight:600; }
+  .comp-url { font-size:11px; color:rgba(255,255,255,.38); margin-left:auto; font-weight:500; }
+  .x { color:rgba(255,255,255,.28); font-size:13px; margin-left:12px; }
+
+  .btn-ghost-glow {
+    width:100%; margin-top:4px; padding:10.5px; border-radius:12px; text-align:center;
+    font-size:12.5px; font-weight:600; color:#E9D5FF;
+    background:rgba(139,92,246,.13); border:1px solid rgba(139,92,246,.45);
+    box-shadow:0 0 20px rgba(139,92,246,.28), inset 0 0 14px rgba(139,92,246,.10);
+  }
+
+  /* platform segmented */
+  .seg { display:flex; background:rgba(7,11,20,.55); border:1px solid rgba(255,255,255,.08);
+         border-radius:12px; padding:4px; gap:4px; }
+  .seg div { flex:1; text-align:center; padding:9px 0; border-radius:9px; font-size:12.5px;
+             font-weight:600; color:rgba(255,255,255,.45); }
+  .seg .on {
+    color:#fff; background:linear-gradient(92deg, rgba(139,92,246,.85), rgba(34,211,238,.70));
+    box-shadow:0 4px 16px rgba(120,100,246,.40), inset 0 1px 0 rgba(255,255,255,.22);
+  }
+
+  /* chips */
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:13px; }
+  .chip { font-size:11.5px; font-weight:500; color:rgba(255,255,255,.78); padding:6.5px 12px;
+    border-radius:99px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10); }
+  .chip.hl { border-color:rgba(34,211,238,.5); color:#A5F3FC; background:rgba(34,211,238,.08);
+             box-shadow:0 0 12px rgba(34,211,238,.18); }
+  .btn-cyan {
+    width:100%; padding:10.5px; border-radius:12px; text-align:center; font-size:12.5px; font-weight:600;
+    color:#A5F3FC; background:rgba(34,211,238,.10); border:1px solid rgba(34,211,238,.45);
+    box-shadow:0 0 20px rgba(34,211,238,.22), inset 0 0 14px rgba(34,211,238,.08);
+  }
+
+  /* budget stats */
+  .stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .stat {
+    position:relative; border-radius:14px; padding:14px 8px 12px; text-align:center;
+    background:rgba(7,11,20,.55); border:1px solid rgba(255,255,255,.09); overflow:hidden;
+  }
+  .stat::before { content:''; position:absolute; left:18%; right:18%; top:0; height:2px;
+    background:linear-gradient(90deg,#8B5CF6,#22D3EE); border-radius:99px;
+    box-shadow:0 0 12px rgba(139,92,246,.8); }
+  .stat b { display:block; font-size:21px; font-weight:700; letter-spacing:-.5px;
+    background:linear-gradient(92deg,#C4B5FD,#67E8F9); -webkit-background-clip:text;
+    background-clip:text; color:transparent; }
+  .stat span { display:block; font-size:10px; font-weight:600; color:rgba(255,255,255,.42);
+    margin-top:5px; letter-spacing:.6px; text-transform:uppercase; }
+
+  /* save row */
+  .save-row { display:flex; justify-content:flex-end; align-items:center; gap:16px; margin-top:2px; }
+  .autosave { font-size:11.5px; color:rgba(255,255,255,.38); font-weight:500; }
+  .btn-primary {
+    padding:12px 30px; border-radius:13px; font-size:13.5px; font-weight:700; letter-spacing:-.1px;
+    background:linear-gradient(92deg,#8B5CF6 0%,#6366F1 48%,#22D3EE 100%);
+    box-shadow:0 10px 30px rgba(120,100,246,.55), 0 0 46px rgba(34,211,238,.25),
+               inset 0 1px 0 rgba(255,255,255,.30);
+  }
+</style>
+</head>
+<body>
+  <div class="aurora">
+    <div class="blob b1"></div><div class="blob b2"></div>
+    <div class="blob b3"></div><div class="blob b4"></div>
+  </div>
+  <div class="grain"></div>
+
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">&#8221;</div>
+        <div>
+          <div class="brand-name">GetCited</div>
+          <div class="brand-sub">AI visibility studio</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <div class="nav-label" style="margin-top:6px;">Workspace</div>
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="10" r="2"/><circle cx="20" cy="14" r="2"/></svg>
+          Configure
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.6 10l-5.7 1.9L12 17.6l-1.9-5.7L4.4 10l5.7-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+          GEO Assistant
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Dashboard
+        </div>
+      </nav>
+      <div class="sb-footer">
+        <div class="usage">
+          <div class="usage-top"><span>Citation scans</span><b>62 / 100</b></div>
+          <div class="bar"><i></i></div>
+        </div>
+        <div class="user">
+          <div class="avatar">AP</div>
+          <div class="user-meta">Anand P. <span>Pro workspace</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <div class="title">Configure</div>
+          <div class="subtitle">Tell GetCited about your brand so we can track how AI engines cite you.</div>
+        </div>
+        <div class="head-badge"><span class="dot"></span> Config synced &middot; 2 min ago</div>
+      </div>
+
+      <div class="grid">
+        <!-- Left column -->
+        <div class="col">
+          <!-- Brand card -->
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title">
+                <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3a17 17 0 010 18M12 3a17 17 0 000 18"/></svg></span>
+                Brand
+              </div>
+              <span class="hint">Used to detect citations</span>
+            </div>
+            <div class="two">
+              <div class="field">
+                <label>Brand URL</label>
+                <div class="input focus">https://getcited.io</div>
+              </div>
+              <div class="field">
+                <label>Brand name</label>
+                <div class="input">GetCited</div>
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:2px;">
+              <label>Description</label>
+              <div class="input textarea">AI citation-share analytics — see how often ChatGPT, Perplexity &amp; Gemini cite your brand, and get a costed plan to grow it.</div>
+            </div>
+          </section>
+
+          <!-- Competitors card -->
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title">
+                <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
+                Competitors
+              </div>
+              <span class="hint">5 of 8 tracked</span>
+            </div>
+            <div class="comp-row"><span class="fav f1">P</span><span class="comp-name">Profound</span><span class="comp-url">tryprofound.com</span><span class="x">&#10005;</span></div>
+            <div class="comp-row"><span class="fav f2">P</span><span class="comp-name">Peec AI</span><span class="comp-url">peec.ai</span><span class="x">&#10005;</span></div>
+            <div class="comp-row"><span class="fav f3">O</span><span class="comp-name">Otterly</span><span class="comp-url">otterly.ai</span><span class="x">&#10005;</span></div>
+            <div class="comp-row"><span class="fav f4">S</span><span class="comp-name">Scrunch AI</span><span class="comp-url">scrunchai.com</span><span class="x">&#10005;</span></div>
+            <div class="comp-row"><span class="fav f5">A</span><span class="comp-name">Athena HQ</span><span class="comp-url">athenahq.ai</span><span class="x">&#10005;</span></div>
+            <div class="btn-ghost-glow">&#10024;&nbsp; Suggest competitors</div>
+          </section>
+        </div>
+
+        <!-- Right column -->
+        <div class="col">
+          <!-- Platform card -->
+          <section class="card" style="padding-bottom:18px;">
+            <div class="card-head" style="margin-bottom:12px;">
+              <div class="card-title">
+                <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+                Platform
+              </div>
+              <span class="hint">How you'll run GetCited</span>
+            </div>
+            <div class="seg"><div class="on">We Serve</div><div>Self Serve</div></div>
+          </section>
+
+          <!-- Buyer-intent queries -->
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title">
+                <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                Buyer-intent queries
+              </div>
+              <span class="hint">8 queries</span>
+            </div>
+            <div class="chips">
+              <span class="chip hl">best GEO tool for SaaS</span>
+              <span class="chip">how to get cited by ChatGPT</span>
+              <span class="chip">AI visibility tracker</span>
+              <span class="chip hl">brand mentions in Perplexity</span>
+              <span class="chip">LLM SEO software</span>
+              <span class="chip">track AI citations</span>
+              <span class="chip">AEO platform pricing</span>
+              <span class="chip">generative engine optimization</span>
+            </div>
+            <div class="btn-cyan">&#8635;&nbsp; Fetch queries</div>
+          </section>
+
+          <!-- Budget & team -->
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title">
+                <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v20M17 5.5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+                Budget &amp; team
+              </div>
+              <span class="hint">Shapes your costed plan</span>
+            </div>
+            <div class="stats">
+              <div class="stat"><b>$400</b><span>Monthly budget</span></div>
+              <div class="stat"><b>2 people</b><span>Team size</span></div>
+              <div class="stat"><b>8 weeks</b><span>Timeline</span></div>
+            </div>
+          </section>
+
+          <!-- Save row -->
+          <div class="save-row">
+            <span class="autosave">Draft auto-saved</span>
+            <div class="btn-primary">Save config &nbsp;&rarr;</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
