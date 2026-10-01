@@ -6,6 +6,12 @@
 
 <!-- Newest first. -->
 
+## 2026-10-01 — Test the second streamed turn, not only one saved probe
+**Confirmed defect:** The GEO chat response omitted the AI SDK's `generateMessageId`. Its server-side assistant message therefore used an empty ID. The first turn could save, but a later assistant reply collided with it and failed the unique-message validation. An actual production-compiled route, real isolated PostgreSQL and mocked provider transport reproduced this failure. The prior successful benchmark probe did not exercise streamed chat.
+**Fix:** Generate server UUIDs; read legacy empty IDs through the existing owned message-row UUID; reject new empty IDs. Commit the incoming user message before dispatch, mark incomplete tools interrupted, and persist the final snapshot within the captured actor context while still rechecking revocation/deadline. Normal business conflicts no longer invalidate the account. Exact UTF-8 message/attachment bounds and fixed public errors are shown before or after sending; the free-example label describes only the example button.
+**Evidence and limits:** Local compiled checks cover five sequential panel calls, cancellation during the fourth, retained known/uncertain usage without retry, subsequent SDK chat and reload, legacy-ID recovery without changing old content, and signout during an in-flight tool. Cancellation reproduced the original usage pattern, but the original browser cancellation cause is unproven. A failed panel batch still has no complete report; ledger evidence and the interrupted conversation remain. No provider or production calls were made for these fixtures. Live deployment/one actual chat check remain controlled by the release operator.
+
+
 ## 2026-10-01 — Record provider spend even when no answer survives
 **What happened:** The first controlled probe used all 128 allowed output tokens and settled 76 input / 128 output tokens, estimated USD 0.0000882, before the application returned an error without persisting an answer. Truncation is the leading inference; the exact finish reason was not retained, so it is not a confirmed diagnosis.
 **Correction:** A separately authorized request asked only for names with a 256-token ceiling. It returned 75 input / 7 output tokens and an owned saved report, estimated USD 0.00001545. Both ledger rows and the original failed run remain; total estimated spend is USD 0.00010365, with no automatic retry.

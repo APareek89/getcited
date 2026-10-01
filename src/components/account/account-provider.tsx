@@ -85,7 +85,7 @@ export function useRequests() {
       const response = await fetch(input, { ...options, headers, signal: controller.signal, cache: 'no-store' });
       if (!current(ticket)) throw new StaleResponse();
       if (response.status === 401) { expire(); throw new StaleResponse(); }
-      if (!response.ok) { const data = await guardedJSON<{ error?: string; message?: string }>(response, () => current(ticket)).catch(error => { if (error instanceof StaleResponse) throw error; return null; }); if (isSessionFailure(data)) { expire(); throw new StaleResponse(); } throw new Error(response.status === 429 ? 'Please wait before trying again.' : data?.message || data?.error || 'The request failed. Please retry.'); }
+      if (!response.ok) { const data = await guardedJSON<{ error?: string; message?: string }>(response, () => current(ticket)).catch(error => { if (error instanceof StaleResponse) throw error; return null; }); if (isSessionFailure(data)) { expire(); throw new StaleResponse(); } throw new Error(data?.message || data?.error || (response.status === 429 ? 'Please wait before trying again.' : 'The request failed. Please retry.')); }
       return fenceResponse(response, () => current(ticket), expire, finish);
     } catch (error) { finish(); throw error; }
   }

@@ -6,11 +6,15 @@ export function json(value, status = 200, headers = {}) {
   return Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } });
 }
 
+export function errorCode(error) {
+  return error.status===401?"AUTH_REQUIRED":error.status===409?(["session_expired","Your account changed. Refresh and try again."].includes(error.message)?"SESSION_CHANGED":"CONFLICT"):error.status===429?"RATE_LIMITED":error.status&&error.status<500?"INVALID_INPUT":"UNAVAILABLE";
+}
+
 export function route(handler) {
   return async (...args) => {
     try { return await handler(...args); }
     catch (error) {
-      return json({ code: error instanceof HttpError ? (error.status===401?"AUTH_REQUIRED":error.status===409?"SESSION_CHANGED":error.status===429?"RATE_LIMITED":"INVALID_INPUT") : "UNAVAILABLE", error: error instanceof HttpError ? error.message : "The service could not complete this request. Please try again later." }, error instanceof HttpError ? error.status : 503);
+      return json({ code: error instanceof HttpError ? errorCode(error) : "UNAVAILABLE", error: error instanceof HttpError ? error.message : "The service could not complete this request. Please try again later." }, error instanceof HttpError ? error.status : 503);
     }
   };
 }

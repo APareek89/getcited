@@ -1,6 +1,7 @@
 "use client";
 
 import { PreparedNotice } from "@/components/account/prepared-notice";
+import { INTERRUPTED_TOOL } from "@/lib/chat-recovery";
 import { useState } from "react";
 import { Loader2, Check, AlertTriangle, ChevronDown, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,12 +68,13 @@ function toolNameOf(part: ToolPart): string {
   return "tool";
 }
 
-export function ToolCallCard({ part, prepared = false }: { part: ToolPart; prepared?: boolean }) {
+export function ToolCallCard({ part, prepared = false, active = true }: { part: ToolPart; prepared?: boolean; active?: boolean }) {
   const name = toolNameOf(part);
   const label = TOOL_LABELS[name] ?? name;
   const state = part.state ?? "input-available";
-  const running = state === "input-streaming" || state === "input-available";
-  const errored = state === "output-error";
+  const pending = state === "input-streaming" || state === "input-available";
+  const running = pending && active;
+  const errored = state === "output-error" || pending && !active;
   const [open, setOpen] = useState(false);
 
   const hasOutput = state === "output-available";
@@ -105,11 +107,12 @@ export function ToolCallCard({ part, prepared = false }: { part: ToolPart; prepa
         </span>
         <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="flex-1 text-sm">{label}</span>
-        <span className="text-[11px] text-muted-foreground">{state}</span>
+        <span className="text-[11px] text-muted-foreground">{pending && !active ? "interrupted" : state}</span>
         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
 
       <PreparedNotice prepared={prepared} />
+      {errored && <div role="alert" className="border-t border-border px-3.5 py-2.5 text-sm text-warning">{INTERRUPTED_TOOL}</div>}
       {/* Specialized result (shown when available & not an error) */}
       {showSpecial && (
         <div className="border-t border-border px-3.5 py-3">{renderResult(name, part.output)}</div>

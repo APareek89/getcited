@@ -1,7 +1,8 @@
+import {randomUUID} from 'node:crypto';
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import {modelFor} from "@/lib/geo/providers";
 import {requireActor} from "@/lib/server/auth";
-import {executionFor,runWithExecution} from "@/lib/server/execution";
+import {executionFor,runWithExecution,requireExecution} from "@/lib/server/execution";
 import {readJson,route,HttpError} from "@/lib/server/http";
 import {acquireCapacity} from "@/lib/server/usage";
 import {requireWorkspaceRoom} from "@/lib/server/workspace";
@@ -36,7 +37,15 @@ import { isoDate, weekDueDate } from "@/lib/geo/schedule";
 import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 import { AGENT_SYSTEM_PROMPT, DEFAULT_AGENT_MODEL, isAgentModel } from "@/lib/geo/agent";
 
+import { CHAT_MESSAGE_BYTES, recoverChatMessages, chatErrorMessage } from "@/lib/chat-recovery";
+
 export const maxDuration = 300;
+function persistenceFailure(error: unknown): string {
+ const e=error as {status?:number;code?:string;cause?:{code?:string}};
+ if(e?.status===401)return 'session_revoked';if(e?.status===408)return 'deadline';if(e?.status===413)return 'thread_limit';
+ const code=e?.code??e?.cause?.code;
+ return typeof code==='string'&&/^[A-Z0-9]{5}$/.test(code)?'db_'+code:'unclassified';
+}
 
 function panelFor(keys: ProviderKeys): PanelistId[] {
   const panel: PanelistId[] = [keys.openai?"openai":"haiku"];
@@ -108,7 +117,7 @@ export const POST=route(async(req:Request)=>{
  const thread=threadId?await getThread(threadId):null;if(!thread)throw new HttpError(404,'Create an owned thread first.');if(thread.prepared)throw new HttpError(409,'The prepared conversation is free and read-only. Start a new thread with an ordinary configuration.');
  const cfgForKeys=await getActiveConfig();if(cfgForKeys?.prepared)throw new HttpError(409,'Save a new ordinary configuration before chatting with a provider.');
  const submitted=Array.isArray(body.messages)?body.messages:[],last=submitted.at(-1);
- if(!last||last.role!=='user'||typeof last.id!=='string'||last.id.length>200||!Array.isArray(last.parts)||last.parts.length<1||last.parts.length>10||last.parts.some((p:{type?:string;text?:unknown})=>p.type!=='text'||typeof p.text!=='string')||Buffer.byteLength(JSON.stringify(last))>16384)throw new HttpError(400,'Send a text message of up to 16 KiB.');
+ if(!last||last.role!=='user'||typeof last.id!=='string'||last.id.length<1||last.id.length>200||!Array.isArray(last.parts)||last.parts.length<1||last.parts.length>10||last.parts.some((p:{type?:string;text?:unknown})=>p.type!=='text'||typeof p.text!=='string')||Buffer.byteLength(JSON.stringify(last))>CHAT_MESSAGE_BYTES)throw new HttpError(400,'Send a text message of up to 16 KiB.');
  const prior=await getThreadMessages(threadId);if(prior.length>=199||prior.some(m=>m.id===last.id))throw new HttpError(409,'Start a new message or thread.');
  const messages:UIMessage[]=[...prior,last];
  const keys=await resolveKeys(body.keys,cfgForKeys?.mode),modelId=typeof body.model==='string'&&isAgentModel(body.model)?body.model:DEFAULT_AGENT_MODEL;
@@ -122,13 +131,19 @@ export const POST=route(async(req:Request)=>{
     memoryBlock = "";
   }
 
+  if(modelId==='gpt-4o-mini'&&!keys.openai)throw new HttpError(400,'Add an OpenAI key for Self Serve, or select We Serve in Configure.');
+  const actor=requireExecution(), model=modelFor(modelId,keys);
+  const modelMessages=await convertToModelMessages(messages,{ignoreIncompleteToolCalls:true});
+  // This checkpoint is committed before any provider dispatch. A broken stream
+  // cannot erase the submitted turn, and a repeated message ID cannot bill twice.
+  await saveThreadMessages(user.id,threadId,messages);
   const result = streamText({
-    model: modelFor(modelId,keys),
+    model,
     maxOutputTokens:4096,maxRetries:0,abortSignal:AbortSignal.any([req.signal,AbortSignal.timeout(Math.max(1,e.deadlineMs-Date.now()))]),
     onFinish:({finishReason})=>{incomplete=!["stop","tool-calls"].includes(finishReason);},
     onAbort:async()=>{await release();},
     system: AGENT_SYSTEM_PROMPT + memoryBlock,
-    messages: await convertToModelMessages(messages),
+    messages: modelMessages,
     stopWhen: stepCountIs(5),
     experimental_telemetry: { isEnabled: false, functionId: "geo-assistant" },
     tools: {
@@ -452,12 +467,17 @@ export const POST=route(async(req:Request)=>{
   });
 
   return result.toUIMessageStreamResponse({
+    generateMessageId:randomUUID,
     originalMessages:messages,
-    onError:()=>"The assistant could not complete this response. Any dispatched usage is recorded.",
+    onError:error=>{incomplete=true;return chatErrorMessage(error);},
     messageMetadata:({part})=>part.type==='finish'?{incomplete}:undefined,
-    onFinish:async({messages:finished})=>{
-      try{await saveThreadMessages(user.id,threadId,finished);}catch{console.warn('[chat] thread_persistence_failed');}finally{await release();}
-    },
+    onFinish:async({messages:finished,isAborted})=>runWithExecution(actor,async()=>{
+      // The captured scope still passes the ordinary durable session check. It
+      // does not grant persistence after revocation or extend the deadline.
+      try{await saveThreadMessages(user.id,threadId,recoverChatMessages(finished,isAborted||incomplete||Boolean(actor.signal?.aborted)));}
+      catch(error){console.warn('[chat] thread_persistence_failed',JSON.stringify({operationId:actor.operationId,category:persistenceFailure(error)}));}
+      finally{await release();}
+    }),
   });
  }catch(error){await release();throw error;}
  });

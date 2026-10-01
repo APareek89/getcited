@@ -1,3 +1,9 @@
+## GEO chat recovery correction — local acceptance, deployment pending
+
+The user reported an interrupted configured GEO Agent. The actual compiled chat fixture confirmed a separate persistence bug: missing server-generated assistant IDs allowed one empty ID, then rejected the next reply as a duplicate. The fix creates UUIDs, gives existing empty IDs a stable owned-row fallback, checkpoints the incoming turn before generation and marks unfinished tools as interrupted. Captured final persistence still rejects revoked/expired sessions. Message/attachment preflight matches the 16 KiB server bound; safe errors and business conflicts no longer masquerade as account changes; free-example copy is scoped to that button.
+
+71 source tests, a secret-free production build and actual compiled-route fixtures passed, including five panel steps, fourth-step cancellation, next-turn/reload, legacy empty-ID recovery and mid-tool signout. The original cancellation trigger is still unknown; its timing does not match the two-minute deadline. These changes are not yet a new deployed or paid-verified release. Root owns packaging, deployment and the authorized single new actual-chat check. Do not automatically retry any provider call.
+
 # GetCited — launch checkpoint, 1 October 2026
 
 The current portfolio launch replaces the historical Supabase/Render account and Aurora UI assumptions below. Those entries are retained as history. Follow the current launch brief and README for the active architecture; do not reuse old credentials or run the old terminal-browser harness.
