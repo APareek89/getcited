@@ -1,5 +1,6 @@
 "use client";
 
+import { PreparedNotice } from "@/components/account/prepared-notice";
 import { useState } from "react";
 import { Loader2, Check, AlertTriangle, ChevronDown, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -66,7 +67,7 @@ function toolNameOf(part: ToolPart): string {
   return "tool";
 }
 
-export function ToolCallCard({ part }: { part: ToolPart }) {
+export function ToolCallCard({ part, prepared = false }: { part: ToolPart; prepared?: boolean }) {
   const name = toolNameOf(part);
   const label = TOOL_LABELS[name] ?? name;
   const state = part.state ?? "input-available";
@@ -108,6 +109,7 @@ export function ToolCallCard({ part }: { part: ToolPart }) {
         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
 
+      <PreparedNotice prepared={prepared} />
       {/* Specialized result (shown when available & not an error) */}
       {showSpecial && (
         <div className="border-t border-border px-3.5 py-3">{renderResult(name, part.output)}</div>

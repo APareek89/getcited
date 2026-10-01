@@ -6,6 +6,31 @@
 
 <!-- Newest first. -->
 
+## 2026-10-01 — Record provider spend even when no answer survives
+**What happened:** The first controlled probe used all 128 allowed output tokens and settled 76 input / 128 output tokens, estimated USD 0.0000882, before the application returned an error without persisting an answer. Truncation is the leading inference; the exact finish reason was not retained, so it is not a confirmed diagnosis.
+**Correction:** A separately authorized request asked only for names with a 256-token ceiling. It returned 75 input / 7 output tokens and an owned saved report, estimated USD 0.00001545. Both ledger rows and the original failed run remain; total estimated spend is USD 0.00010365, with no automatic retry.
+**Scope:** The prompt supplies the brands. It demonstrates provider/usage/report integration, not an unbiased visibility result. Bounded answer validation and accounting must remain separate: an application failure does not erase provider spend.
+
+## 2026-10-01 — An undefined layout class can survive every functional test
+**What happened:** The deployed signup page used `gc-auth`, but no stylesheet defined that class. The form stretched across the page with no intended padding and a tiny unstyled heading.
+**Fix:** Signup now uses the existing sign-in page's centered flex layout, `max-w-sm`, padding and heading spacing. Auth and state logic were unchanged. Targeted lint/TypeScript and the coherent production build passed; root then verified the corrected live signup and account flow. Preserve the earlier browser failure as evidence; successful endpoint tests did not prove visual quality.
+
+
+## 2026-10-01 — Render the entire saved prepared message, not just one DTO
+**What happened:** Browser acceptance exposed two consecutive crashes. The prepared benchmark lacked sentiment/citation summaries; after that repair, the plan still lacked spent USD, spent hours and person-hour capacity. Passing endpoint checks did not prove that both cards could render.
+**Fix:** The factory now returns the full typed benchmark and plan outputs. Existing canonical messages are repaired from saved reports, tactics and configuration while preserving message IDs/timestamps, plans, reports and tracker annotations. Client fallbacks keep older recorded evidence visible and mark absent summaries unavailable instead of inventing zeros.
+**Evidence:** Repo-contained before/after fixtures came from the actual isolated synthetic PostgreSQL database; only opaque IDs were replaced. The combined regression renders both real cards, nested plan previews, approval and document controls. It checks the actual $400 allocation and 69 displayed hours out of 400. All 13 client/card tests and 23 database checks pass. Final local browser approval created six tracker rows and verified restored edits with no console errors.
+**Related credential boundary:** Self Serve assistance must resolve stored owner keys, never fall back to hosted keys. The UI states that requirement; chat and the explicit probe accept owner-scoped tab credentials. Prepared controls cannot initiate paid assistance.
+**Launch checkpoint:** The corrected image is deployed and healthy. Live free account checks, the corrected paid probe, saved-report browser restoration and final read-only usage audit have passed. Health alone was not treated as end-to-end acceptance.
+
+
+## 2026-10-01 — Account fences must include bodies and partial stream frames
+**What changed:** The hosted account owns all client actions, history, keys and exports. Capturing identity only after `fetch()` is too late: JSON, Blob or stream consumption can finish after another account signs in. The client now captures the owner generation before work, sends the rendered owner to the server, clears on cross-tab notification, and stops stale frames/downloads before display. Old global browser state is not imported.
+**Regression found:** A stream transport chunk can end halfway through an SSE frame. Returning from `pull()` without producing output left the reader waiting indefinitely. The implementation now reads until a complete frame or end of stream and rejects current-session expiry before subsequent private frames in the same chunk.
+**Evidence:** Nine offline client regressions pass, including split-frame delivery, current/old-session expiry, delayed JSON/Blob data, request owner headers and BYOK isolation. No provider request was needed.
+**Product accuracy:** Prepared examples are permanently free and labeled. Ordinary one-response probes identify literal mentions and unverified domains, not current web-grounded market visibility. Historical provider/UI claims were updated to the configured OpenAI default and neutral shared theme.
+
+
 ## 2026-07-16 — Dev server AuthRetryableFetchError: launcher env lost the corp CA bundle
 **What happened:** After repointing the preview launch config from `pnpm` to a pinned Node 22
 binary, every server-side Supabase fetch failed (`UNABLE_TO_GET_ISSUER_CERT_LOCALLY` →

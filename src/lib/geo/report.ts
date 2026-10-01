@@ -4,6 +4,7 @@ import type { ShareOfVoiceEntry, PerPromptEntry, Sentiment } from "./types";
 
 export interface FullReport {
   report_id: string;
+  prepared: boolean;
   status: string;
   brand: string;
   panel: string[];
@@ -16,6 +17,7 @@ export interface FullReport {
   answers: {
     model: string;
     prompt: string;
+    raw_answer: string;
     mentions: string[];
     cited_domains: string[];
     sentiment: Sentiment | null;
@@ -38,6 +40,7 @@ export async function buildReport(store: GeoStore, runId: string): Promise<FullR
 
   return {
     report_id: stored.run.id,
+    prepared: Boolean(stored.run.prepared),
     status: stored.run.status,
     brand: stored.brand,
     panel: stored.run.panel,
@@ -50,6 +53,7 @@ export async function buildReport(store: GeoStore, runId: string): Promise<FullR
     answers: stored.answers.map((a) => ({
       model: a.model,
       prompt: a.prompt,
+      raw_answer: a.rawAnswer,
       mentions: a.mentions,
       cited_domains: a.citedDomains,
       sentiment: a.sentiment,

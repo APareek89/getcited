@@ -1,22 +1,15 @@
-import "server-only";
-import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
-import { createServerSupabase } from "@/lib/supabase/server";
-
-/** The signed-in user, or null. Revalidates the token with Supabase. */
-export async function getUser(): Promise<User | null> {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+import {headers} from 'next/headers';
+import {redirect} from 'next/navigation';
+import {actorFor} from './server/auth';
+import {origin} from './server/security';
+import {currentExecution,validateExecution} from './server/execution';
+import {ownerId} from './db/client';
+import {HttpError} from './server/http';
+export async function getUser(){
+ const e=currentExecution();if(e){await validateExecution();return {id:e.ownerId,email:''};}
+ const requestHeaders=await headers();
+ const actor=await actorFor(new Request(origin()+'/',{headers:requestHeaders}));
+ return actor?{id:actor.id,email:actor.email}:null;
 }
-
-/** The signed-in user, or redirect to /login. Use in protected pages/actions. */
-export async function requireUser(nextPath?: string): Promise<User> {
-  const user = await getUser();
-  if (!user) {
-    redirect(nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login");
-  }
-  return user;
-}
+export async function requireUser(next='/assistant'):Promise<{id:string;email:string}>{const user=await getUser();if(!user)redirect('/login?next='+encodeURIComponent(next));return user;}
+export async function repositoryOwner(expected?:string){const user=await getUser();if(!user)throw new HttpError(401,'Sign in to continue.');if(expected&&ownerId(expected)!==user.id)throw new HttpError(404,'Resource not found.');return user.id;}

@@ -1,12 +1,19 @@
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import {modelFor} from "@/lib/geo/providers";
+import {requireActor} from "@/lib/server/auth";
+import {executionFor,runWithExecution} from "@/lib/server/execution";
+import {readJson,route,HttpError} from "@/lib/server/http";
+import {acquireCapacity} from "@/lib/server/usage";
+import {requireWorkspaceRoom} from "@/lib/server/workspace";
+import {resolveKeys} from "@/lib/server/keys";
+import {getThread,getThreadMessages} from "@/lib/db/threads";
+import {userLimit} from "@/lib/server/security";
 import { z } from "zod";
-import type { User } from "@supabase/supabase-js";
-import { requireUser } from "@/lib/auth";
+type User={id:string;email:string};
 import { getActiveConfig, type ConfigView } from "@/lib/db/configs";
-import { SupabaseGeoStore } from "@/lib/db/geo-store";
+import { PostgresGeoStore } from "@/lib/db/geo-store";
 import { savePlan, getLatestPlan, getPlanById } from "@/lib/db/plans";
-import { approvePlanToTracker, latestTrackedPlanItems } from "@/lib/db/tracker";
+import { latestTrackedPlanItems } from "@/lib/db/tracker";
 import { saveThreadMessages } from "@/lib/db/threads";
 import { listMemories, saveMemory, memoryPromptBlock } from "@/lib/db/memories";
 import { persistCitations } from "@/lib/mcp/data";
@@ -22,8 +29,7 @@ import {
   type ProviderKeys,
   type FullReport,
 } from "@/lib/geo";
-import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
-import { getStoredProviderKeys } from "@/lib/db/api-keys";
+import { costCapUsd } from "@/lib/geo/keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
 import { generateRoadmap, type RoadmapDoc } from "@/lib/geo/roadmap";
 import { isoDate, weekDueDate } from "@/lib/geo/schedule";
@@ -33,21 +39,10 @@ import { AGENT_SYSTEM_PROMPT, DEFAULT_AGENT_MODEL, isAgentModel } from "@/lib/ge
 export const maxDuration = 300;
 
 function panelFor(keys: ProviderKeys): PanelistId[] {
-  const panel: PanelistId[] = ["haiku"];
+  const panel: PanelistId[] = [keys.openai?"openai":"haiku"];
   if (keys.perplexity) panel.push("perplexity");
   if (keys.custom) panel.push("custom");
   return panel;
-}
-
-async function resolveKeys(
-  session: Partial<ProviderKeys> | undefined,
-  mode: string | undefined,
-): Promise<ProviderKeys> {
-  const hasSession =
-    session && (session.anthropic || session.perplexity || session.gemini || session.groq || session.custom);
-  if (hasSession) return { ...session };
-  if (mode === "self_serve") return getStoredProviderKeys();
-  return serverProviderKeys();
 }
 
 /** Run (or fetch) a benchmark and return its stored report. */
@@ -59,6 +54,7 @@ async function runBenchmark(
 ): Promise<
   { report: FullReport; brand: string; ownedDomains: string[]; warning?: string } | { error: string }
 > {
+  if(cfg?.prepared)throw new HttpError(409,'The prepared example is read-only. Save an ordinary configuration first.');
   const brand = overrides?.brand || cfg?.brandName || cfg?.brandUrl;
   const competitors = overrides?.competitors ?? cfg?.competitors ?? [];
   const queries = overrides?.queries ?? cfg?.queries ?? [];
@@ -67,8 +63,8 @@ async function runBenchmark(
   if (competitors.length === 0) return { error: "No competitors set. Ask the user for at least one." };
   if (queries.length === 0) return { error: "No queries configured. Ask the user to add queries in Configure." };
 
-  const store = new SupabaseGeoStore(user.id, cfg?.id ?? null);
-  const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys });
+  const store = new PostgresGeoStore(user.id, cfg?.id ?? null);
+  const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys,forceMock:process.env.GETCITED_MOCK_MODE==="1",parserMode:"deterministic" });
   const out = await runner.run({
     brand,
     brand_domains: ownedDomains,
@@ -82,7 +78,7 @@ async function runBenchmark(
 }
 
 async function reportById(user: User, reportId: string): Promise<FullReport | null> {
-  return buildReport(new SupabaseGeoStore(user.id), reportId);
+  return buildReport(new PostgresGeoStore(user.id), reportId);
 }
 
 /** Diagnose + persist crawled evidence to the citations table. */
@@ -103,29 +99,21 @@ async function diagnoseAndPersist(
   return dx;
 }
 
-export async function POST(req: Request) {
-  const user = await requireUser();
-  const body = (await req.json()) as {
-    messages: UIMessage[];
-    model?: string;
-    keys?: Partial<ProviderKeys>;
-    threadId?: string;
-  };
-  const modelId = body.model && isAgentModel(body.model) ? body.model : DEFAULT_AGENT_MODEL;
-  const threadId = body.threadId;
-
-  const cfgForKeys = await getActiveConfig();
-  const keys = await resolveKeys(body.keys, cfgForKeys?.mode);
-  if (!keys.anthropic) {
-    return new Response(
-      cfgForKeys?.mode === "self_serve"
-        ? "No Anthropic key. Add your key under Configure → Platform (Self Serve)."
-        : "Anthropic key not configured on the server",
-      { status: 400 },
-    );
-  }
-  const anthropic = createAnthropic({ apiKey: keys.anthropic });
-
+export const POST=route(async(req:Request)=>{
+ const user=await requireActor(req,{write:true});await userLimit(user,'chat',20,3600);
+ const body=await readJson(req,256*1024),e=executionFor(user);
+ return runWithExecution({...e,signal:AbortSignal.any([req.signal,AbortSignal.timeout(120000)])},async()=>{
+ const release=await acquireCapacity();try{
+ const threadId=typeof body.threadId==='string'?body.threadId:'';
+ const thread=threadId?await getThread(threadId):null;if(!thread)throw new HttpError(404,'Create an owned thread first.');if(thread.prepared)throw new HttpError(409,'The prepared conversation is free and read-only. Start a new thread with an ordinary configuration.');
+ const cfgForKeys=await getActiveConfig();if(cfgForKeys?.prepared)throw new HttpError(409,'Save a new ordinary configuration before chatting with a provider.');
+ const submitted=Array.isArray(body.messages)?body.messages:[],last=submitted.at(-1);
+ if(!last||last.role!=='user'||typeof last.id!=='string'||last.id.length>200||!Array.isArray(last.parts)||last.parts.length<1||last.parts.length>10||last.parts.some((p:{type?:string;text?:unknown})=>p.type!=='text'||typeof p.text!=='string')||Buffer.byteLength(JSON.stringify(last))>16384)throw new HttpError(400,'Send a text message of up to 16 KiB.');
+ const prior=await getThreadMessages(threadId);if(prior.length>=199||prior.some(m=>m.id===last.id))throw new HttpError(409,'Start a new message or thread.');
+ const messages:UIMessage[]=[...prior,last];
+ const keys=await resolveKeys(body.keys,cfgForKeys?.mode),modelId=typeof body.model==='string'&&isAgentModel(body.model)?body.model:DEFAULT_AGENT_MODEL;
+ await requireWorkspaceRoom();
+ let incomplete=false;
   // Persistent memory → system prompt.
   let memoryBlock = "";
   try {
@@ -135,11 +123,14 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
-    model: anthropic(modelId),
+    model: modelFor(modelId,keys),
+    maxOutputTokens:4096,maxRetries:0,abortSignal:AbortSignal.any([req.signal,AbortSignal.timeout(Math.max(1,e.deadlineMs-Date.now()))]),
+    onFinish:({finishReason})=>{incomplete=!["stop","tool-calls"].includes(finishReason);},
+    onAbort:async()=>{await release();},
     system: AGENT_SYSTEM_PROMPT + memoryBlock,
-    messages: await convertToModelMessages(body.messages),
-    stopWhen: stepCountIs(8),
-    experimental_telemetry: { isEnabled: true, functionId: "geo-assistant" },
+    messages: await convertToModelMessages(messages),
+    stopWhen: stepCountIs(5),
+    experimental_telemetry: { isEnabled: false, functionId: "geo-assistant" },
     tools: {
       get_active_config: tool({
         description: "Load the user's saved config (brand, competitors, queries, budget, team).",
@@ -203,6 +194,8 @@ export async function POST(req: Request) {
         async execute({ report_id }) {
           const cfg = await getActiveConfig();
           let report: FullReport | null = report_id ? await reportById(user, report_id) : null;
+          if(report_id&&!report)throw new HttpError(404,"Report not found.");
+          if(report?.prepared)throw new HttpError(409,"Prepared reports cannot trigger provider or crawl work.");
           let brand = cfg?.brandName || cfg?.brandUrl || "";
           let ownedDomains = cfg?.brandDomains ?? [];
           if (!report) {
@@ -238,6 +231,8 @@ export async function POST(req: Request) {
         async execute(input) {
           const cfg = await getActiveConfig();
           let report: FullReport | null = input.report_id ? await reportById(user, input.report_id) : null;
+          if(input.report_id&&!report)throw new HttpError(404,"Report not found.");
+          if(report?.prepared)throw new HttpError(409,"Prepared reports cannot trigger provider or crawl work.");
           let brand = cfg?.brandName || cfg?.brandUrl || "";
           let ownedDomains = cfg?.brandDomains ?? [];
           let runId: string | null = input.report_id ?? null;
@@ -270,7 +265,7 @@ export async function POST(req: Request) {
           let roadmapError: string | null = null;
           try {
             roadmap = await generateRoadmap({
-              anthropicKey: keys.anthropic!,
+              keys,
               brand,
               tactics: allocation.tactics,
               gaps: dx.gap,
@@ -279,8 +274,7 @@ export async function POST(req: Request) {
               teamSize: team,
             });
           } catch (e) {
-            roadmapError = e instanceof Error ? e.message : "unknown error";
-            console.error("[build_plan] roadmap generation failed after retry:", roadmapError);
+            roadmapError = "The provider did not return a complete roadmap. Any dispatched usage is recorded.";
           }
 
           const saved = await savePlan({
@@ -335,20 +329,7 @@ export async function POST(req: Request) {
         async execute({ plan_id }) {
           const plan = plan_id ? await getPlanById(plan_id) : await getLatestPlan();
           if (!plan) return { error: "No plan found. Build a plan first (How can I improve?)." };
-          const res = await approvePlanToTracker(user.id, plan);
-          if (res.alreadyApproved)
-            return {
-              plan_id: plan.id,
-              already_approved: true,
-              message: "This plan is already in the Tracker — the Tracker tab has the items.",
-            };
-          if (res.created === 0)
-            return { error: "This plan has no roadmap actions to track. Rebuild the plan (build_plan) first." };
-          return {
-            plan_id: plan.id,
-            created_items: res.created,
-            message: `Approved — ${res.created} execution items are now on the Tracker tab with real due dates. The user updates status and remarks there.`,
-          };
+          return {plan_id:plan.id,requires_user_approval:true,message:"Use the plan card's Approve button to add these actions to your tracker."};
         },
       }),
 
@@ -436,11 +417,12 @@ export async function POST(req: Request) {
         async execute({ type, topic }) {
           const cfg = await getActiveConfig();
           const plan = await getLatestPlan();
+          if(plan?.prepared)throw new HttpError(409,"Prepared context cannot trigger paid content generation.");
           const planContext = plan
             ? `Active plan targets citation share ${(plan.projection?.currentCitationShare ?? 0) * 100}% → ${(plan.targetCitationShare ?? 0) * 100}%; tactics: ${plan.tactics.map((t) => t.name).join("; ")}`
             : undefined;
           const markdown = await generateContent({
-            anthropicKey: keys.anthropic!,
+            keys,
             type,
             topic,
             brand: cfg?.brandName || cfg?.brandUrl || "the brand",
@@ -470,15 +452,13 @@ export async function POST(req: Request) {
   });
 
   return result.toUIMessageStreamResponse({
-    originalMessages: body.messages,
-    onFinish: threadId
-      ? async ({ messages }) => {
-          try {
-            await saveThreadMessages(user.id, threadId, messages);
-          } catch (e) {
-            console.error("[chat] thread persistence failed:", e instanceof Error ? e.message : e);
-          }
-        }
-      : undefined,
+    originalMessages:messages,
+    onError:()=>"The assistant could not complete this response. Any dispatched usage is recorded.",
+    messageMetadata:({part})=>part.type==='finish'?{incomplete}:undefined,
+    onFinish:async({messages:finished})=>{
+      try{await saveThreadMessages(user.id,threadId,finished);}catch{console.warn('[chat] thread_persistence_failed');}finally{await release();}
+    },
   });
-}
+ }catch(error){await release();throw error;}
+ });
+});

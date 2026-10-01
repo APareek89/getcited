@@ -145,8 +145,7 @@ export function MockAudit() {
             ))}
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            This is illustrative mock data. Sign in to run a real panel across Claude &amp;
-            Perplexity — Gemini and Llama-class models available with your keys.
+            This is illustrative mock data. Create an account for a saved prepared example, or run an ordinary OpenAI probe after configuring your brand.
           </p>
         </div>
       )}

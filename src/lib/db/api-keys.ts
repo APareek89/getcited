@@ -1,60 +1,13 @@
 import "server-only";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import type { ProviderKeys } from "@/lib/geo/types";
-
-// "custom" holds an opaque JSON blob {baseURL, model, apiKey} for the OpenAI-compatible
-// panelist — the provider column is free text, so no schema change is needed. The
-// store/get/delete/list paths treat every value as an opaque string, so the blob
-// flows through the AES-GCM encrypt/decrypt path unchanged.
-export type KeyProvider = "anthropic" | "perplexity" | "gemini" | "groq" | "custom";
-export const KEY_PROVIDERS: KeyProvider[] = ["anthropic", "perplexity", "gemini", "groq", "custom"];
-
-/** Store (or replace) an encrypted BYO key for a provider. Plaintext never persisted. */
-export async function storeEncryptedKey(
-  userId: string,
-  provider: KeyProvider,
-  plaintext: string,
-): Promise<void> {
-  const supabase = await createServerSupabase();
-  const enc = encryptSecret(plaintext);
-  await supabase.from("api_keys").delete().eq("provider", provider);
-  const { error } = await supabase.from("api_keys").insert({
-    user_id: userId,
-    provider,
-    ciphertext: enc.ciphertext,
-    iv: enc.iv,
-    auth_tag: enc.authTag,
-  });
-  if (error) throw new Error(`storeEncryptedKey failed: ${error.message}`);
-}
-
-export async function deleteStoredKey(provider: KeyProvider): Promise<void> {
-  const supabase = await createServerSupabase();
-  await supabase.from("api_keys").delete().eq("provider", provider);
-}
-
-/** Which providers the user has stored (names only — never returns key material). */
-export async function listStoredProviders(): Promise<KeyProvider[]> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase.from("api_keys").select("provider");
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => r.provider as KeyProvider);
-}
-
-/** Decrypt all stored keys into ProviderKeys (server-only; never log the result). */
-export async function getStoredProviderKeys(): Promise<ProviderKeys> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase.from("api_keys").select("provider, ciphertext, iv, auth_tag");
-  if (error) throw new Error(error.message);
-  const keys: ProviderKeys = {};
-  for (const r of data ?? []) {
-    try {
-      const value = decryptSecret({ ciphertext: r.ciphertext, iv: r.iv, authTag: r.auth_tag });
-      (keys as Record<string, string>)[r.provider] = value;
-    } catch {
-      // skip a key that fails to decrypt (e.g. secret rotated)
-    }
-  }
-  return keys;
-}
+import {and,eq} from "drizzle-orm";
+import {drizzleDatabase,schema} from "./client";
+import {repositoryOwner} from "../auth";
+import {HttpError} from "../server/http";
+import {encryptSecret,decryptSecret} from "../crypto";
+import type {ProviderKeys} from "../geo/types";
+export const KEY_PROVIDERS=["openai","anthropic","perplexity","gemini","groq","custom"] as const;
+export type KeyProvider=(typeof KEY_PROVIDERS)[number];
+export async function storeEncryptedKey(userId:string,provider:KeyProvider,plaintext:string){const owner=await repositoryOwner(userId);if(!KEY_PROVIDERS.includes(provider)||typeof plaintext!=='string'||plaintext.length<8||plaintext.length>2000)throw new HttpError(400,'Invalid provider credential.');const enc=encryptSecret(plaintext),db=await drizzleDatabase();await db.insert(schema.apiKeys).values({userId:owner,provider,...enc}).onConflictDoUpdate({target:[schema.apiKeys.userId,schema.apiKeys.provider],set:{...enc,createdAt:new Date()}});}
+export async function deleteStoredKey(provider:KeyProvider){const owner=await repositoryOwner(),db=await drizzleDatabase();await db.delete(schema.apiKeys).where(and(eq(schema.apiKeys.userId,owner),eq(schema.apiKeys.provider,provider)));}
+export async function listStoredProviders():Promise<KeyProvider[]>{const owner=await repositoryOwner(),db=await drizzleDatabase();return (await db.select({provider:schema.apiKeys.provider}).from(schema.apiKeys).where(eq(schema.apiKeys.userId,owner))).map(r=>r.provider as KeyProvider);}
+export async function getStoredProviderKeys():Promise<ProviderKeys>{const owner=await repositoryOwner(),db=await drizzleDatabase();const rows=await db.select().from(schema.apiKeys).where(eq(schema.apiKeys.userId,owner));const keys:ProviderKeys={shared:false};for(const r of rows){if(!KEY_PROVIDERS.includes(r.provider as KeyProvider))continue;try{(keys as Record<string,unknown>)[r.provider]=decryptSecret(r);}catch{throw new HttpError(503,'A stored credential could not be read. Re-enter that credential.');}}return keys;}

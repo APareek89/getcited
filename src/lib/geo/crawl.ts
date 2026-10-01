@@ -1,4 +1,6 @@
 import "server-only";
+import { safePublicGet, publicUrl } from "./safe-network";
+import { requireExecution } from "@/lib/server/execution";
 import { categorizeSource } from "./plan";
 import { robotsAllows } from "./robots";
 import type { SourceType } from "./tactics";
@@ -63,14 +65,11 @@ async function isAllowed(
   let body = robotsCache.get(key);
   if (body === undefined) {
     try {
-      const res = await fetch(`${key}/robots.txt`, {
-        headers: { "user-agent": ua },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      body = res.ok ? await res.text() : null;
-    } catch {
-      body = null;
-    }
+      const res = await safePublicGet(`${key}/robots.txt`, {timeoutMs, maxBytes: 128_000});
+      if(res.status === 404) body = "";
+      else if(res.ok) body = res.text;
+      else return false;
+    } catch { return false; }
     robotsCache.set(key, body);
   }
   if (!body) return true; // no robots.txt → allowed
@@ -99,39 +98,10 @@ function decodeEntities(s: string): string {
     .replace(/&#39;/g, "'");
 }
 
-async function firecrawlScrape(url: string, apiKey: string, timeoutMs: number) {
-  const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!res.ok) throw new Error(`firecrawl ${res.status}`);
-  const data = (await res.json()) as { data?: { markdown?: string; metadata?: { title?: string } } };
-  const md = data.data?.markdown ?? "";
-  return { title: data.data?.metadata?.title ?? null, text: md };
-}
-
-async function fetchReadable(
-  url: string,
-  ua: string,
-  timeoutMs: number,
-): Promise<{ title: string | null; text: string }> {
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-  if (firecrawlKey) {
-    try {
-      return await firecrawlScrape(url, firecrawlKey, timeoutMs);
-    } catch {
-      // fall through to plain fetch
-    }
-  }
-  const res = await fetch(url, {
-    headers: { "user-agent": ua, accept: "text/html" },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!res.ok) throw new Error(`fetch ${res.status}`);
-  const html = await res.text();
-  return extract(html);
+async function fetchReadable(url: string, _ua: string, timeoutMs: number): Promise<{title:string|null;text:string}> {
+  const res = await safePublicGet(url, {timeoutMs, maxBytes:1_048_576, headers:{accept:"text/html,text/plain"}});
+  if(!res.ok) throw Error(`Public page returned HTTP ${res.status}`);
+  return extract(res.text);
 }
 
 /**
@@ -139,10 +109,12 @@ async function fetchReadable(
  * never hammer a single site; robots.txt is honored (disallowed URLs are skipped).
  */
 export async function crawlCitations(urls: string[], opts: CrawlOptions = {}): Promise<CrawlResult[]> {
+  const scope = requireExecution();
+  if(scope.mode !== "live") return urls.slice(0,24).map(url=>({url,domain:host(url),sourceType:categorizeSource(url),title:null,excerpt:null,mentionsBrand:false,mentionsCompetitor:null,fetched:false,skippedReason:"Prepared example does not crawl websites"}));
   const ua = opts.userAgent ?? DEFAULT_UA;
-  const timeoutMs = opts.timeoutMs ?? 8000;
+  const timeoutMs = Math.min(opts.timeoutMs ?? 8000, 8000);
   const perHostDelayMs = opts.perHostDelayMs ?? 1000;
-  const maxUrls = opts.maxUrls ?? 24;
+  const maxUrls = Math.max(0,Math.min(opts.maxUrls ?? 12,24));
   const owned = (opts.ownedDomains ?? []).map((d) => d.toLowerCase());
   const brandNames = (opts.brandNames ?? []).map((b) => b.toLowerCase());
   const competitors = opts.competitors ?? [];
@@ -174,6 +146,8 @@ export async function crawlCitations(urls: string[], opts: CrawlOptions = {}): P
     lastHostHit.set(h, Date.now());
 
     try {
+      publicUrl(url);
+      if (Date.now() >= scope.deadlineMs) throw Error("Crawl deadline exceeded");
       if (!(await isAllowed(url, ua, robotsCache, timeoutMs))) {
         results.push({ ...base, skippedReason: "robots.txt disallow" });
         continue;

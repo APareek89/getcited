@@ -6,6 +6,7 @@ import { PANELIST_MODELS } from "./models";
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens?:number;
 }
 
 export interface PanelAnswer {
@@ -28,12 +29,12 @@ const PANELIST_SYSTEM =
   "Recommend specific products, brands, or companies by name, and where relevant mention the " +
   "websites you would cite.";
 
-function normalizeUsage(u: { inputTokens?: number; outputTokens?: number } | undefined): TokenUsage {
-  return { inputTokens: u?.inputTokens ?? 0, outputTokens: u?.outputTokens ?? 0 };
+function normalizeUsage(u: { inputTokens?: number; outputTokens?: number; inputTokenDetails?:{cacheReadTokens?:number} } | undefined): TokenUsage {
+  return { inputTokens: u?.inputTokens ?? 0, outputTokens: u?.outputTokens ?? 0, cachedInputTokens:u?.inputTokenDetails?.cacheReadTokens??0 };
 }
 
 /** Real panelist backed by a provider, built from per-call keys. */
-export function createRealPanelist(id: PanelistId, keys: ProviderKeys): Panelist {
+export function createRealPanelist(id: PanelistId, keys: ProviderKeys, maxOutputTokens = 600): Panelist {
   // The custom panelist has no static registry modelId — derive its display/cost id
   // from the user's config blob so reports show the real model (not an empty string).
   const modelId =
@@ -48,9 +49,11 @@ export function createRealPanelist(id: PanelistId, keys: ProviderKeys): Panelist
         model: panelistModel(id, keys),
         system: PANELIST_SYSTEM,
         prompt,
-        maxOutputTokens: 600,
-        experimental_telemetry: { isEnabled: true, functionId: `panelist.${id}` },
+        maxOutputTokens,
+        maxRetries: 0,
+        experimental_telemetry: { isEnabled: false, functionId: `panelist.${id}` },
       });
+      if (["length","content-filter","error"].includes(res.finishReason) || !res.text.trim()) throw Error("Provider returned incomplete or refused text; usage was recorded and no retry was made.");
       // Web-grounded providers (Perplexity sonar) return the ACTUAL cited pages as
       // sources — the evidence the plan is built on. Don't rely on text regex alone.
       const sources = (res.sources ?? [])

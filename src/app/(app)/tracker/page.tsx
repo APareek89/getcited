@@ -1,3 +1,4 @@
+import { PreparedNotice } from "@/components/account/prepared-notice";
 import { ListChecks, ArrowRight } from "lucide-react";
 import { latestTrackedPlanItems } from "@/lib/db/tracker";
 import { getPlanById } from "@/lib/db/plans";
@@ -59,6 +60,7 @@ export default async function TrackerPage() {
         </div>
       </div>
 
+      <PreparedNotice prepared={plan?.prepared} />
       <TrackerTable initialItems={tracked.items} />
     </div>
   );

@@ -1,7 +1,8 @@
 import "server-only";
+import type { ProviderKeys } from "./types";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "./providers";
+import { defaultModel } from "./providers";
 import type { ChosenTactic, Gap, Projection } from "./plan";
 import type { RoadmapDoc } from "./schedule";
 
@@ -56,7 +57,7 @@ export const RoadmapSchema = z.object({
 });
 
 export async function generateRoadmap(params: {
-  anthropicKey: string;
+  keys: ProviderKeys;
   brand: string;
   tactics: ChosenTactic[];
   gaps: Gap[];
@@ -76,7 +77,7 @@ export async function generateRoadmap(params: {
     .join("\n");
 
   const req = {
-    model: anthropicModel(ROADMAP_MODEL_ID, params.anthropicKey),
+    model: defaultModel(params.keys),
     schema: RoadmapSchema,
     system:
       "You are a GEO (Generative Engine Optimization) program manager. Turn an approved tactic " +
@@ -93,18 +94,10 @@ export async function generateRoadmap(params: {
       `Citation gaps to close:\n${gapLines || "- (none identified)"}\n\n` +
       `Approved tactics:\n${tacticLines}\n\n` +
       `Produce ${Math.min(params.timelineWeeks, 12)} weeks. Every tactic must appear in at least one week.`,
-    maxOutputTokens: 16000,
-    experimental_telemetry: { isEnabled: true, functionId: "roadmap" },
+    maxOutputTokens: 4096,
+    maxRetries: 0,
+    experimental_telemetry: { isEnabled: false, functionId: "roadmap" },
   };
-  // One retry: roadmap failure used to be swallowed into a silent empty roadmap,
-  // which ships a planless plan document. A single retry absorbs transient
-  // provider errors; a persistent failure still throws so callers can surface it.
-  try {
-    const res = await generateObject(req);
-    return res.object;
-  } catch (first) {
-    console.error("[roadmap] generation failed, retrying once:", first instanceof Error ? first.message : first);
-    const res = await generateObject(req);
-    return res.object;
-  }
+  const res = await generateObject(req);
+  return res.object;
 }

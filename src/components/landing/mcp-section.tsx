@@ -18,12 +18,12 @@ const NINE_TOOLS = [
 const SECURITY_ITEMS = [
   { icon: ShieldCheck, text: "OAuth 2.1 + PKCE" },
   { icon: KeyRound, text: "Self-hosted authorization server — no third-party identity provider in the loop" },
-  { icon: LockKeyhole, text: "Scoped to your account — tokens expire automatically after 7 days" },
+  { icon: LockKeyhole, text: "Scoped to your account — tokens expire after 24 hours; sign out revokes session access" },
 ];
 
 function ToolChip({ name }: { name: string }) {
   return (
-    <span className="glass inline-flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+    <span className="glass inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
       {name} <Check className="h-3 w-3 text-cyan-400" />
     </span>
   );
@@ -56,16 +56,16 @@ export function McpSection() {
 
       {/* Claude window vignette */}
       <div className="glass relative mx-auto mt-12 max-w-4xl rounded-[20px]">
-        <div className="flex items-center gap-2 border-b border-white/10 px-5 py-3">
-          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
+        <div className="flex items-center gap-2 border-b border-border px-5 py-3">
+          <span className="h-2.5 w-2.5 rounded-full bg-secondary" />
+          <span className="h-2.5 w-2.5 rounded-full bg-secondary" />
+          <span className="h-2.5 w-2.5 rounded-full bg-secondary" />
           <span className="ml-2 text-xs text-muted-foreground">
             {"Claude — connected to GetCited"}
           </span>
         </div>
         <div className="space-y-4 p-6">
-          <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-white/10 px-4 py-2.5 text-sm text-foreground">
+          <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-secondary px-4 py-2.5 text-sm text-foreground">
             {
               "Benchmark my brand, then build a plan for a $6,000 budget, two people, eight weeks. If it looks right, put it in the tracker."
             }
@@ -80,7 +80,7 @@ export function McpSection() {
               "Panel complete: your AI share of voice is 18% across the Claude + Perplexity panel — citation share 9%. (Single run — read it as directional.) Biggest gap: comparison-listicle citations, where two competitors appear and you don't. I've built a 9-action plan, estimated at $5,700 of your $6,000, projected +6–9 pts SoV (modeled estimate, medium confidence, assumptions listed). Shall I approve it into your tracker?"
             }
           </div>
-          <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-white/10 px-4 py-2.5 text-sm text-foreground">
+          <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-secondary px-4 py-2.5 text-sm text-foreground">
             Approve it.
           </div>
           <div className="flex flex-wrap gap-2">

@@ -67,7 +67,7 @@ function ActShell({
     <div id={id} className="relative py-16 lg:min-h-[80vh]">
       {/* Progress rail node */}
       <div className="absolute -left-6 top-16 hidden xl:flex xl:flex-col xl:items-center">
-        <div className="bg-aurora flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white shadow-[0_0_18px_rgba(124,58,237,0.5)]">
+        <div className="bg-aurora flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white shadow-none">
           {node}
         </div>
       </div>
@@ -107,7 +107,7 @@ function Act1Vignette() {
         <SampleChip />
       </div>
       <div className="glass mt-4 inline-flex overflow-hidden rounded-full text-xs">
-        <span className="bg-white/10 px-3 py-1.5 text-foreground">Mention share</span>
+        <span className="bg-secondary px-3 py-1.5 text-foreground">Mention share</span>
         <span className="px-3 py-1.5 text-muted-foreground">Citation share</span>
       </div>
       <div className="mt-5 space-y-3">
@@ -119,9 +119,9 @@ function Act1Vignette() {
               </span>
               <span className={b.you ? "text-foreground" : "text-muted-foreground"}>{b.pct}%</span>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-white/5">
+            <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
               <div
-                className={b.you ? "bg-aurora h-full rounded-full" : "h-full rounded-full bg-white/15"}
+                className={b.you ? "bg-aurora h-full rounded-full" : "h-full rounded-full bg-secondary"}
                 style={{ width: `${b.pct}%` }}
               />
             </div>
@@ -277,7 +277,7 @@ function Act3Vignette() {
             <dt className="font-mono text-xs uppercase text-muted-foreground">Who</dt>
             <dd className="text-sm text-foreground">{"Content lead — approx. 4 hrs/week"}</dd>
           </dl>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <span className="glass inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground">
               <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
               {"Modeled lift +6–9 pts SoV · assumptions listed in plan"}
@@ -338,7 +338,7 @@ function Act4Vignette() {
       </div>
       <div className="mx-auto h-8 w-px bg-gradient-to-b from-violet-500/50 to-cyan-400/50" />
       <div className="space-y-3">
-        <div className="ml-auto max-w-[80%] rounded-2xl rounded-br-sm bg-white/10 px-4 py-2 text-sm text-foreground">
+        <div className="ml-auto max-w-[80%] rounded-2xl rounded-br-sm bg-secondary px-4 py-2 text-sm text-foreground">
           Are we on schedule?
         </div>
         <div className="glass max-w-[92%] rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground">
@@ -367,7 +367,7 @@ export function Acts() {
         eyebrow="ACT 1 — MEASURE"
         heading="Your AI share of voice, from a real multi-LLM panel. Not a simulated score."
         body={
-          "GetCited asks the questions your buyers actually ask — across Claude and Perplexity's answer engine by default, with Gemini and Llama-class models available on your keys. The panel records who gets mentioned, who gets cited as a linked source, and how each brand is described. And here's the honest part: one panel run is a snapshot, not a statistic — we say so on the report instead of pretending otherwise. What comes back is your AI share of voice: benchmarked against competitors, aggregated across the panel, labeled for exactly what it is."
+          "GetCited asks the questions your buyers actually ask — using the configured OpenAI model by default, with other supported providers available on your keys. The panel records who gets mentioned, who gets cited as a linked source, and how each brand is described. And here's the honest part: one panel run is a snapshot, not a statistic — we say so on the report instead of pretending otherwise. What comes back is your AI share of voice: benchmarked against competitors, aggregated across the panel, labeled for exactly what it is."
         }
         features={[
           {

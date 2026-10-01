@@ -1,23 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { getThreadMessages, deleteThread } from "@/lib/db/threads";
-
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ threadId: string }> },
-) {
-  await requireUser();
-  const { threadId } = await params;
-  const messages = await getThreadMessages(threadId); // RLS → only own threads
-  return NextResponse.json({ messages });
-}
-
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ threadId: string }> },
-) {
-  await requireUser();
-  const { threadId } = await params;
-  await deleteThread(threadId);
-  return NextResponse.json({ ok: true });
-}
+import {requireActor} from '@/lib/server/auth';
+import {json,route,HttpError} from '@/lib/server/http';
+import {executionFor,runWithExecution} from '@/lib/server/execution';
+import {getThread,getThreadMessages,deleteThread} from '@/lib/db/threads';
+type Context={params:Promise<{threadId:string}>};
+export const GET=route(async(req:Request,context:Context)=>{const actor=await requireActor(req),{threadId}=await context.params;return runWithExecution(executionFor(actor),async()=>{const thread=await getThread(threadId);if(!thread)throw new HttpError(404,'Thread not found.');return json({thread,messages:await getThreadMessages(threadId)});});});
+export const DELETE=route(async(req:Request,context:Context)=>{const actor=await requireActor(req,{write:true}),{threadId}=await context.params;return runWithExecution(executionFor(actor),async()=>{await deleteThread(threadId);return json({ok:true});});});

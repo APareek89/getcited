@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { getUser } from "@/lib/auth";
-import { ButtonLink } from "@/components/ui/button-link";
 import { Logo } from "@/components/logo";
 import {
   SITE_URL,
@@ -97,10 +94,10 @@ const jsonLd = {
         "@type": "Offer",
         price: "0",
         priceCurrency: "USD",
-        description: "Free instant AI visibility audit — no signup required",
+        description: "Free illustrative mock audit — no signup required",
       },
       featureList: [
-        "Multi-LLM AI visibility panel (Claude, Perplexity; Gemini and Llama available)",
+        "Configured OpenAI model probe and optional provider panel",
         "AI share of voice, citation share and sentiment tracking",
         "Competitor benchmarking on identical queries",
         "Citation-source crawling and gap diagnosis",
@@ -122,13 +119,6 @@ const jsonLd = {
   ],
 };
 
-const NAV_LINKS = [
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#methodology", label: "Methodology" },
-  { href: "#mcp", label: "MCP" },
-  { href: "#faq", label: "FAQ" },
-];
-
 const FOOTER_LINKS = [
   { href: "#faq", label: "What is generative engine optimization?" },
   { href: "#why-ai-visibility", label: "GEO vs SEO vs AEO explained" },
@@ -137,7 +127,7 @@ const FOOTER_LINKS = [
 ];
 
 export default async function Home() {
-  const user = await getUser();
+
 
   return (
     <div className="flex flex-1 flex-col overflow-x-clip">
@@ -148,42 +138,6 @@ export default async function Home() {
       {/* Hoisted to <head> by React 19 — see the metadata comment above. */}
       <link rel="canonical" href={`${SITE_URL}/`} />
       <meta property="og:url" content={`${SITE_URL}/`} />
-
-      {/* Header */}
-      <header className="glass-header sticky top-0 z-30">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-          <Link href="/">
-            <Logo />
-          </Link>
-          <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
-            {NAV_LINKS.map((l) => (
-              <a key={l.href} href={l.href} className="transition-colors hover:text-foreground">
-                {l.label}
-              </a>
-            ))}
-          </nav>
-          <div className="flex items-center gap-2">
-            {user ? (
-              <ButtonLink size="sm" href="/configure">
-                Go to app <ArrowRight className="h-4 w-4" />
-              </ButtonLink>
-            ) : (
-              <>
-                <ButtonLink variant="ghost" size="sm" href="/login">
-                  Sign in
-                </ButtonLink>
-                <ButtonLink
-                  size="sm"
-                  href="/login"
-                  className="bg-aurora border-0 text-white hover:opacity-90"
-                >
-                  Get started
-                </ButtonLink>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
 
       {/* 11 sections, in spec order */}
       <Hero />

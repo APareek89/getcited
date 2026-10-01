@@ -3,9 +3,7 @@ import type { BeginRunParams, GeoStore, PersistedAnswer } from "./store";
 import {
   PANELIST_MODELS,
   REAL_CALL_COST_ESTIMATE_USD,
-  hasAnthropicKey,
   hasPanelistKey,
-  PARSER_MODEL_ID,
 } from "./models";
 import { createRealPanelist, createMockPanelist, type Panelist } from "./panelist";
 import { createAnthropicParser, createDeterministicParser, type Parser } from "./parser";
@@ -15,7 +13,7 @@ import { resolvePromptSet } from "./prompt-library";
 import { PanelRunError } from "./errors";
 
 /** Hard ceiling on LLM calls per run (prompts × runs × panelists). */
-export const MAX_PANELIST_CALLS = 240;
+export const MAX_PANELIST_CALLS = 24;
 
 export interface PanelRunner {
   run(input: MeasureInput): Promise<MeasureOutput>;
@@ -32,6 +30,7 @@ export function planRun(input: MeasureInput): RunPlan {
   const prompts = resolvePrompts(input);
   const panel = resolvePanel(input);
   const runs = input.runs ?? 1;
+  if(!Number.isInteger(runs)||runs<1||runs>3||!input.brand.trim()||input.brand.length>120||input.competitors.length>5||input.competitors.some(c=>!c.trim()||c.length>120)||prompts.some(p=>!p.trim()||p.length>4096)) throw new PanelRunError("Workload too large or invalid inputs", "workload_too_large");
   const panelistCalls = prompts.length * runs * panel.length;
   if (panelistCalls > MAX_PANELIST_CALLS) {
     throw new PanelRunError(
@@ -68,7 +67,7 @@ function resolvePrompts(input: MeasureInput): string[] {
 }
 
 function resolvePanel(input: MeasureInput): string[] {
-  const panel = input.panel && input.panel.length > 0 ? input.panel : ["haiku"];
+  const panel = input.panel && input.panel.length > 0 ? input.panel : ["openai"];
   const valid = Object.keys(PANELIST_MODELS);
   for (const id of panel) {
     if (!valid.includes(id)) {
@@ -86,6 +85,8 @@ export interface RunnerOptions {
   forceMock?: boolean;
   /** Override the per-call cost estimate (USD). Defaults to 0 for mock, ~$0.01 for real. */
   estimatePerCallUsd?: number;
+  parserMode?: "deterministic" | "model";
+  maxOutputTokens?: number;
 }
 
 /**
@@ -102,24 +103,25 @@ export class InProcessPanelRunner implements PanelRunner {
     const { prompts, panel, runs } = planRun(input);
     const keys = this.opts.keys;
     const forceMock = this.opts.forceMock ?? false;
-    const isMock = (id: string): boolean => forceMock || !hasPanelistKey(id as PanelistId, keys);
-    const parserMock = forceMock || !hasAnthropicKey(keys);
-    const anyRealCall = panel.some((id) => !isMock(id)) || !parserMock;
+    const outputTokens = this.opts.maxOutputTokens ?? 600;
+    if (!Number.isInteger(outputTokens) || outputTokens < 1 || outputTokens > 600) throw new PanelRunError("Output token limit must be 1–600", "workload_too_large");
+    if (!forceMock && panel.some(id => !hasPanelistKey(id as PanelistId, keys))) throw new PanelRunError("A selected live model is not configured; no sample answers were substituted", "provider_error");
+    const isMock = (): boolean => forceMock;
+    const parserMock = forceMock || this.opts.parserMode !== "model";
+    const anyRealCall = panel.some((id) => !isMock()) || !parserMock;
 
     const { runId } = await this.store.beginRun(beginRunParams(input, panel));
 
     try {
-      // A user-configured custom endpoint is far likelier to be misconfigured than
-      // our built-in providers. Its failures (at BUILD or CALL time) degrade
-      // gracefully — drop the custom panelist and keep the built-in panel running,
-      // never failing the whole benchmark. Built-in panelist failures stay fatal.
+      // Unsupported custom configuration can be excluded before dispatch.
+      // Once any provider is dispatched, failures stop the run without fallback.
       const panelWarnings: string[] = [];
       let customDisabled = false;
       const panelists = panel
         .map((id) => {
-          if (isMock(id)) return createMockPanelist(id, input.brand, input.competitors);
+          if (isMock()) return createMockPanelist(id, input.brand, input.competitors);
           try {
-            return createRealPanelist(id as PanelistId, keys);
+            return createRealPanelist(id as PanelistId, keys, outputTokens);
           } catch (err) {
             if (id === "custom") {
               panelWarnings.push(customSkipWarning(err, keys.custom));
@@ -130,9 +132,10 @@ export class InProcessPanelRunner implements PanelRunner {
           }
         })
         .filter((p): p is Panelist => p !== null);
+      if(!panelists.length) throw new PanelRunError("No supported live panelist is available", "provider_error");
       const parser: Parser = parserMock
         ? createDeterministicParser()
-        : createAnthropicParser(keys.anthropic!);
+        : createAnthropicParser(keys);
       const meter = new CostMeter(this.opts.costCapUsd);
       const estimatePerCall =
         this.opts.estimatePerCallUsd ?? (anyRealCall ? REAL_CALL_COST_ESTIMATE_USD : 0);
@@ -149,22 +152,10 @@ export class InProcessPanelRunner implements PanelRunner {
                 "cost_cap_exceeded",
               );
             }
-            let answer;
-            try {
-              answer = await this.callPanelist(panelist, prompt);
-            } catch (err) {
-              // Custom endpoint failed mid-run: disable it and continue with the
-              // built-in panel (built-in failures still propagate as fatal).
-              if (panelist.id === "custom") {
-                customDisabled = true;
-                panelWarnings.push(customSkipWarning(err, keys.custom));
-                continue;
-              }
-              throw err;
-            }
+            const answer = await this.callPanelist(panelist, prompt);
             meter.add(answer.model, answer.usage);
             const parsed = await this.callParser(parser, answer.text, input);
-            meter.add(PARSER_MODEL_ID, parsed.usage);
+            meter.add(parsed.model, parsed.usage);
             // Merge REAL provider sources (Perplexity) with text-extracted domains.
             const sourceDomains = answer.sources
               .map((u) => {
@@ -197,7 +188,7 @@ export class InProcessPanelRunner implements PanelRunner {
       const sentimentScore = averageSentiment(persisted.map((a) => a.sentiment));
 
       await this.store.finishRun(runId, {
-        costUsd: round4(meter.total),
+        costUsd: meter.total,
         answers: persisted,
         sov: brandSov,
         sentimentScore,
@@ -213,7 +204,9 @@ export class InProcessPanelRunner implements PanelRunner {
         answer_count: persisted.length,
         share_of_voice: scored.shareOfVoice,
         per_prompt: scored.perPrompt,
-        cost_usd: round4(meter.total),
+        cost_usd: meter.total,
+        parser_mode: parserMock ? "deterministic" : "model",
+        provenance: forceMock ? "sample" : "live",
         created_at: new Date().toISOString(),
         ...(panelWarnings.length ? { panel_warning: panelWarnings[0] } : {}),
       };
@@ -259,8 +252,8 @@ function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+function errorMessage(_err: unknown): string {
+  return "Provider operation failed; no automatic retry. Usage may have been incurred.";
 }
 
 /**
@@ -273,7 +266,7 @@ function errorMessage(err: unknown): string {
  * (from parseCustomConfig) never contains the blob, so it's safe.
  */
 export function customSkipWarning(err: unknown, customBlob: string | undefined): string {
-  let msg = errorMessage(err);
+  let msg = err instanceof Error ? err.message : "Unsupported custom configuration";
   try {
     const key = (JSON.parse(customBlob ?? "{}") as { apiKey?: unknown }).apiKey;
     if (typeof key === "string" && key.length >= 4) msg = msg.split(key).join("***");

@@ -43,7 +43,7 @@ export function StickyCta() {
       <button
         type="button"
         onClick={scrollToForm}
-        className="glass fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-foreground shadow-2xl shadow-violet-500/20 transition-colors hover:bg-white/10 sm:inline-flex"
+        className="glass fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-foreground shadow-2xl shadow-violet-500/20 transition-colors hover:bg-secondary sm:inline-flex"
       >
         {label} <ArrowUp className="h-4 w-4 text-aurora" />
       </button>

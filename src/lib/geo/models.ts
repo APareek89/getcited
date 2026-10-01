@@ -1,6 +1,6 @@
 import type { PanelistId, ProviderKeys } from "./types";
 
-export type Provider = "anthropic" | "google" | "groq" | "perplexity" | "custom";
+export type Provider = "openai" | "anthropic" | "google" | "groq" | "perplexity" | "custom";
 
 export interface PanelistModel {
   provider: Provider;
@@ -12,10 +12,11 @@ export interface PanelistModel {
 
 /**
  * Panelist registry. Each panelist runs for real only when its provider key is
- * present in the per-call ProviderKeys, otherwise the runner falls back to the
- * deterministic mock. Model ids are centralized here so they're easy to bump.
+ * present in trusted per-call ProviderKeys. Missing live keys fail closed;
+ * samples must explicitly select the deterministic mock.
  */
 export const PANELIST_MODELS: Record<PanelistId, PanelistModel> = {
+  openai: {provider: "openai", modelId: "gpt-4o-mini", label: "GPT-4o mini", keyField: "openai"},
   haiku: {
     provider: "anthropic",
     modelId: "claude-haiku-4-5",
@@ -24,20 +25,20 @@ export const PANELIST_MODELS: Record<PanelistId, PanelistModel> = {
   },
   gemini: {
     provider: "google",
-    modelId: "gemini-2.0-flash",
-    label: "Gemini 2.0 Flash",
+    modelId: "gemini-2.5-flash-lite",
+    label: "Gemini 2.5 Flash-Lite (BYOK)",
     keyField: "gemini",
   },
   groq: {
     provider: "groq",
     modelId: "llama-3.3-70b-versatile",
-    label: "Llama 3.3 70B (Groq)",
+    label: "Llama 3.3 70B (retired; unavailable)",
     keyField: "groq",
   },
   perplexity: {
     provider: "perplexity",
     modelId: "sonar",
-    label: "Perplexity Sonar",
+    label: "Perplexity Sonar (legacy; unavailable)",
     keyField: "perplexity",
   },
   custom: {
@@ -51,22 +52,17 @@ export const PANELIST_MODELS: Record<PanelistId, PanelistModel> = {
   },
 };
 
-/** Parser/scorer + hallucination checker model (always Anthropic Haiku). */
-export const PARSER_MODEL_ID = "claude-haiku-4-5";
-export const PARSER_PROVIDER: Provider = "anthropic";
+/** Default optional model parser; ordinary benchmarks use the deterministic parser. */
+export const PARSER_MODEL_ID = "gpt-4o-mini";
+export const PARSER_PROVIDER: Provider = "openai";
 
-/**
- * Approximate pricing in USD per 1M tokens — used ONLY for the cost-cap guardrail,
- * so rough values are fine. Unknown/mock models contribute $0.
- */
-export const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
-  "claude-haiku-4-5": { inputPerM: 1.0, outputPerM: 5.0 },
-  "gemini-2.0-flash": { inputPerM: 0.1, outputPerM: 0.4 },
-  "llama-3.3-70b-versatile": { inputPerM: 0.59, outputPerM: 0.79 },
-  sonar: { inputPerM: 1.0, outputPerM: 1.0 },
-  // NOTE: the custom OpenAI-compatible panelist has no entry here — its model id is
-  // user-supplied and unknown, so CostMeter treats it as $0 and it never counts
-  // toward the per-run cost cap. Accepted tradeoff for a BYO panelist.
+/** Verified configured rates used for report estimates. Durable usage also records returned model. */
+export const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number; cachedPerM:number }> = {
+  "gpt-4o-mini": { inputPerM: 0.15, outputPerM: 0.60, cachedPerM:0.075 },
+  "gpt-4o": { inputPerM: 2.5, outputPerM: 10, cachedPerM:1.25 },
+  "claude-haiku-4-5": { inputPerM: 1.0, outputPerM: 5.0, cachedPerM:0.1 },
+  "claude-sonnet-4-6": { inputPerM: 3.0, outputPerM: 15.0, cachedPerM:0.3 },
+  "gemini-2.5-flash-lite": { inputPerM: 0.1, outputPerM: 0.4, cachedPerM:0.01 },
 };
 
 /** Rough per-call cost estimate (USD) used to abort BEFORE spending near the cap. */

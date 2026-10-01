@@ -2,30 +2,20 @@ import { Radar, ClipboardList, KeyRound, Sigma, ArrowDown } from "lucide-react";
 import { MockAudit } from "@/components/landing/mock-audit";
 
 const FACT_CHIPS = [
-  { icon: Radar, text: "Real multi-LLM panel — measured answers, not a simulated score" },
+  { icon: Radar, text: "Recorded model answers and clearly labeled prepared examples" },
   { icon: ClipboardList, text: "Costed plans — per-tactic WHAT, WHY, HOW, WHO, and timeline" },
-  { icon: KeyRound, text: "Your keys or ours — session-only BYO keys by default" },
+  { icon: KeyRound, text: "Your keys or ours — Tab-session BYO keys, cleared on sign out" },
   { icon: Sigma, text: "A confidence rating on every projection — no guaranteed-lift claims" },
 ];
 
 export function Hero() {
   return (
     <section id="hero" className="relative mx-auto w-full max-w-7xl px-6 pb-16 pt-20 lg:pt-28">
-      {/* Aurora radials */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-24 -top-16 h-[420px] w-[420px] rounded-full bg-[#7C3AED]/25 blur-[120px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-10 -right-24 h-[380px] w-[380px] rounded-full bg-[#22D3EE]/20 blur-[120px]"
-      />
-
       <div className="relative grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
         {/* Left: copy */}
         <div>
           <div className="glass mb-6 inline-flex items-center rounded-full px-4 py-1.5 text-xs uppercase tracking-widest text-muted-foreground">
-            {"AI visibility tool · Free instant audit — no signup"}
+            {"AI visibility workspace · Free illustrative mock audit"}
           </div>
           <h1 className="text-balance text-5xl font-semibold tracking-tight text-foreground lg:text-6xl">
             {"Measure your AI visibility. Get the plan that "}
@@ -33,7 +23,7 @@ export function Hero() {
           </h1>
           <p className="mt-6 max-w-xl text-lg text-muted-foreground">
             {
-              "GetCited runs a real multi-LLM panel — Claude, Perplexity's answer engine, with Gemini and Llama-class models available — against the questions your buyers actually ask, and reports your share of voice, citation share, and sentiment across the panel. Then it does what no AI visibility platform does: it turns the numbers into a costed, trackable action plan — budget, owners, dates. Every projection is a modeled estimate with a confidence rating and its assumptions listed — never a guarantee."
+              "Compare brand mentions in model answers, then turn your findings into a costed plan and an execution tracker. The hosted default is OpenAI GPT-4o mini. Prepared examples are free and illustrative; ordinary model requests use your allowance. Projections show their assumptions and are never guarantees."
             }
           </p>
           <a
@@ -47,7 +37,7 @@ export function Hero() {
         {/* Right: the live audit form (the product, not a screenshot) */}
         <div id="audit-form" className="lg:pl-4">
           <div className="mb-3 text-sm font-medium text-foreground">
-            See where you stand in about 60 seconds
+            Explore an illustrative report
           </div>
           <MockAudit />
           <p className="mt-3 text-xs text-muted-foreground">

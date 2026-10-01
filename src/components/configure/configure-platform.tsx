@@ -1,4 +1,5 @@
 "use client";
+import { useRequests } from "@/components/account/account-provider";
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -30,11 +31,11 @@ import {
 
 /* Mirrors the Aurora Glass tier system defined in configure-form.tsx. */
 const TIER1 =
-  "rounded-[20px] border border-white/[0.12] bg-white/[0.05] backdrop-blur-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.25)] transition-colors";
+  "rounded-[20px] border border-border bg-secondary  shadow-none transition-colors";
 const TIER2 =
-  "rounded-xl border border-white/[0.08] bg-white/[0.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
-const TIER3 = "rounded-full border border-white/10 bg-white/[0.06]";
-const CODE = "rounded bg-white/[0.07] px-1 py-0.5 font-mono text-[10px] text-foreground/90";
+  "rounded-xl border border-border bg-secondary shadow-none";
+const TIER3 = "rounded-full border border-border bg-secondary";
+const CODE = "rounded bg-secondary px-1 py-0.5 font-mono text-[10px] text-foreground/90";
 
 const REPO_URL = "https://github.com/APareek89/getcited";
 
@@ -43,25 +44,25 @@ const REPO_URL = "https://github.com/APareek89/getcited";
 // the apiKey. Cleared when the custom key is removed.
 const CUSTOM_HINT_KEY = "getcited_custom_hint";
 type CustomHint = { baseURL: string; model: string };
-function readCustomHint(): CustomHint | null {
+function readCustomHint(owner: string): CustomHint | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(CUSTOM_HINT_KEY);
+    const raw = window.localStorage.getItem(CUSTOM_HINT_KEY + ":" + owner);
     return raw ? (JSON.parse(raw) as CustomHint) : null;
   } catch {
     return null;
   }
 }
-function writeCustomHint(h: CustomHint) {
+function writeCustomHint(owner: string, h: CustomHint) {
   try {
-    window.localStorage.setItem(CUSTOM_HINT_KEY, JSON.stringify(h));
+    window.localStorage.setItem(CUSTOM_HINT_KEY + ":" + owner, JSON.stringify(h));
   } catch {
     /* non-fatal — prefill just won't survive remount */
   }
 }
-function clearCustomHint() {
+function clearCustomHint(owner: string) {
   try {
-    window.localStorage.removeItem(CUSTOM_HINT_KEY);
+    window.localStorage.removeItem(CUSTOM_HINT_KEY + ":" + owner);
   } catch {
     /* non-fatal */
   }
@@ -72,11 +73,13 @@ const PROVIDERS: {
   label: string;
   required?: boolean;
   placeholder: string;
+  unavailable?: string;
 }[] = [
-  { id: "anthropic", label: "Anthropic", required: true, placeholder: "sk-ant-…" },
-  { id: "perplexity", label: "Perplexity", placeholder: "pplx-…" },
-  { id: "gemini", label: "Gemini", placeholder: "AIza…" },
-  { id: "groq", label: "Groq", placeholder: "gsk_…" },
+  { id: "openai", label: "OpenAI", placeholder: "sk-…" },
+  { id: "anthropic", label: "Anthropic", placeholder: "sk-ant-…" },
+  { id: "perplexity", label: "Perplexity", placeholder: "Unavailable", unavailable: "Current route pricing is not verified." },
+  { id: "gemini", label: "Gemini 2.5 Flash-Lite", placeholder: "AIza…" },
+  { id: "groq", label: "Groq", placeholder: "Unavailable", unavailable: "The prior route is retired; no replacement is configured." },
 ];
 
 /** Segmented pill control (role=radiogroup, roving tabindex, ←/→ switches). */
@@ -107,7 +110,7 @@ function Segmented({
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
-      className="flex shrink-0 items-center gap-1 self-start rounded-full border border-white/10 bg-white/[0.03] p-1"
+      className="flex shrink-0 items-center gap-1 self-start rounded-full border border-border bg-secondary p-1"
     >
       {options.map((o, i) => {
         const active = value === o.value;
@@ -127,7 +130,7 @@ function Segmented({
             className={cn(
               "rounded-full px-3 py-1.5 text-xs transition-all",
               active
-                ? "animate-in fade-in zoom-in-95 bg-aurora font-medium text-white shadow-[0_0_14px_rgba(124,58,237,0.3)] duration-150"
+                ? "animate-in fade-in zoom-in-95 bg-aurora font-medium text-white shadow-none duration-150"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -155,8 +158,8 @@ function CardHead({
 }) {
   return (
     <div className="flex shrink-0 items-start gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-gradient-to-br from-[#7C3AED]/25 to-[#22D3EE]/10">
-        <Icon className="h-4 w-4 text-violet-300" />
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-border bg-secondary">
+        <Icon className="h-4 w-4 text-primary" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -197,7 +200,7 @@ function SelectChip({
         e.stopPropagation();
         onSelect();
       }}
-      className="shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-white/30 hover:text-foreground"
+      className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
     >
       Select
     </button>
@@ -216,7 +219,7 @@ function Point({ children }: { children: ReactNode }) {
 function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
     <li className="flex gap-2">
-      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] font-mono text-[9px] text-muted-foreground">
+      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-secondary font-mono text-[9px] text-muted-foreground">
         {n}
       </span>
       <span className="min-w-0">{children}</span>
@@ -238,6 +241,9 @@ export function ConfigurePlatform({
   mode: string;
   onModeChange: (mode: string) => void;
 }) {
+  const currentRequests = useRequests();
+  const [requests] = useState(() => currentRequests);
+  const ownerId = requests.ownerId!;
   const [, startTransition] = useTransition();
   const [stored, setStored] = useState<string[]>([]);
   const [session, setSession] = useState<SessionKeys>({});
@@ -253,10 +259,10 @@ export function ConfigurePlatform({
 
   useEffect(() => {
     // sessionStorage is client-only, so this read must happen after mount.
-    const s = getSessionKeys();
+    const s = getSessionKeys(ownerId);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSession(s);
-    listStoredKeysAction().then((r) => r.ok && setStored(r.data));
+    requests.action(owner => listStoredKeysAction(owner)).then((r) => r?.ok && setStored(r.data));
     // Prefill custom baseURL + model (NOT the key). Prefer the readable session blob;
     // fall back to the non-secret hint left by a previous encrypted save.
     let baseURL = "";
@@ -271,7 +277,7 @@ export function ConfigurePlatform({
       }
     }
     if (!baseURL && !model) {
-      const hint = readCustomHint();
+      const hint = readCustomHint(ownerId);
       if (hint) {
         baseURL = hint.baseURL;
         model = hint.model;
@@ -280,7 +286,7 @@ export function ConfigurePlatform({
     if (baseURL || model) {
       setCustom((c) => ({ ...c, baseURL, model }));
     }
-  }, []);
+  }, [ownerId, requests]);
 
   const configuredCount = PROVIDERS.filter(
     (p) => Boolean(session[p.id]) || stored.includes(p.id as string),
@@ -291,7 +297,8 @@ export function ConfigurePlatform({
     const prev = mode;
     onModeChange(next); // optimistic — the card highlight moves instantly
     startTransition(async () => {
-      const res = await saveModeAction(next);
+      const res = await requests.action(owner => saveModeAction(next, owner));
+      if (!res) return;
       if (!res.ok) {
         toast.error(res.error);
         onModeChange(prev); // revert the highlight
@@ -307,15 +314,16 @@ export function ConfigurePlatform({
     if (!val) return;
     if (storage === "session") {
       // Session keys stay in this tab (sessionStorage); sent per request, never persisted.
-      setSessionKey(id, val);
-      setSession(getSessionKeys());
+      setSessionKey(ownerId, id, val);
+      setSession(getSessionKeys(ownerId));
       setInputs((p) => ({ ...p, [id]: "" }));
       return;
     }
     setSavingRow(id as string);
     startTransition(async () => {
-      const res = await storeKeyAction({ provider: id as never, key: val });
+      const res = await requests.action(owner => storeKeyAction({ provider: id as never, key: val }, owner));
       setSavingRow(null);
+      if (!res) return;
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -327,7 +335,8 @@ export function ConfigurePlatform({
 
   function removeStored(id: string) {
     startTransition(async () => {
-      const res = await deleteKeyAction(id);
+      const res = await requests.action(owner => deleteKeyAction(id, owner));
+      if (!res) return;
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -356,17 +365,18 @@ export function ConfigurePlatform({
       return;
     }
     const blob = JSON.stringify({ baseURL, model, apiKey });
-    writeCustomHint({ baseURL, model });
+    writeCustomHint(ownerId, { baseURL, model });
     if (storage === "session") {
-      setSessionKey("custom", blob);
-      setSession(getSessionKeys());
+      setSessionKey(ownerId, "custom", blob);
+      setSession(getSessionKeys(ownerId));
       setCustom((c) => ({ ...c, apiKey: "" })); // never keep the key in state
       return;
     }
     setSavingCustom(true);
     startTransition(async () => {
-      const res = await storeKeyAction({ provider: "custom" as never, key: blob });
+      const res = await requests.action(owner => storeKeyAction({ provider: "custom" as never, key: blob }, owner));
       setSavingCustom(false);
+      if (!res) return;
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -378,16 +388,17 @@ export function ConfigurePlatform({
 
   /** Remove the custom panelist from both session and encrypted store. */
   function removeCustom() {
-    clearCustomHint();
+    clearCustomHint(ownerId);
     if (session.custom) {
-      setSessionKey("custom", "");
-      setSession(getSessionKeys());
+      setSessionKey(ownerId, "custom", "");
+      setSession(getSessionKeys(ownerId));
     }
     setCustom({ baseURL: "", model: "", apiKey: "" });
     if (stored.includes("custom")) {
       startTransition(async () => {
-        const res = await deleteKeyAction("custom");
-        if (!res.ok) {
+        const res = await requests.action(owner => deleteKeyAction("custom", owner));
+        if (!res) return;
+      if (!res.ok) {
           toast.error(res.error);
           return;
         }
@@ -398,7 +409,7 @@ export function ConfigurePlatform({
 
   const selfServe = mode === "self_serve";
   const SELECTED =
-    "border-violet-400/40 bg-white/[0.06] shadow-[0_0_28px_rgba(124,58,237,0.22)] hover:border-violet-400/50";
+    "border-primary/40 bg-secondary shadow-none hover:border-primary/40";
 
   return (
     <div className="flex flex-col gap-3">
@@ -415,7 +426,7 @@ export function ConfigurePlatform({
           className={cn(
             TIER1,
             "flex h-full cursor-pointer flex-col gap-3 p-4",
-            !selfServe ? SELECTED : "hover:border-white/[0.18]",
+            !selfServe ? SELECTED : "hover:border-border",
           )}
         >
           <CardHead
@@ -438,11 +449,10 @@ export function ConfigurePlatform({
           />
           <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
             <Point>
-              The AI answer panel runs Anthropic Claude (Haiku) plus Perplexity Sonar for
-              answer-engine coverage — Gemini and Llama-class models are available.
+              The included provider is OpenAI GPT-4o mini. Other providers require their own configured keys.
             </Point>
-            <Point>Roadmap writing uses a stronger Claude model.</Point>
-            <Point>Runs on our keys — every run reports its exact cost.</Point>
+            <Point>Agent and roadmap requests use the configured model.</Point>
+            <Point>Runs on included keys within a bounded allowance; costs are estimates.</Point>
             <Point>A hard per-run cost ceiling is enforced.</Point>
           </ul>
           <div
@@ -452,7 +462,7 @@ export function ConfigurePlatform({
             )}
           >
             <ShieldCheck className="size-3.5 shrink-0 text-positive" />
-            Nothing to configure — it just runs.
+            Save your business context before running research.
           </div>
         </section>
 
@@ -463,7 +473,7 @@ export function ConfigurePlatform({
           className={cn(
             TIER1,
             "flex h-full cursor-pointer flex-col gap-3 p-4",
-            selfServe ? SELECTED : "hover:border-white/[0.18]",
+            selfServe ? SELECTED : "hover:border-border",
           )}
         >
           <CardHead
@@ -500,8 +510,7 @@ export function ConfigurePlatform({
           >
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-positive" />
             <span>
-              Session keys never leave this tab and clear when it closes · stored keys are
-              AES-GCM encrypted, never logged.
+              Tab-session keys are sent with requests and cleared on sign out or account change. Browsers may restore tab storage. Opt-in stored keys are AES-GCM encrypted.
             </span>
           </div>
 
@@ -535,7 +544,7 @@ export function ConfigurePlatform({
                           aria-hidden
                           className={cn(
                             "h-1.5 w-1.5 shrink-0 rounded-full",
-                            hasStored ? "bg-[#22D3EE]" : "bg-positive",
+                            hasStored ? "bg-positive" : "bg-positive",
                           )}
                         />
                       )}
@@ -544,13 +553,13 @@ export function ConfigurePlatform({
                         {p.required && <span className="text-destructive"> *</span>}
                       </span>
                       {hasSession && (
-                        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-1.5 text-[9px] uppercase text-muted-foreground">
+                        <span className="shrink-0 rounded-full border border-border bg-secondary px-1.5 text-[9px] uppercase text-muted-foreground">
                           session
                         </span>
                       )}
                       {hasStored && (
                         <span className="inline-flex shrink-0 items-center gap-1">
-                          <span className="rounded-full border border-white/10 bg-white/[0.06] px-1.5 text-[9px] uppercase text-muted-foreground">
+                          <span className="rounded-full border border-border bg-secondary px-1.5 text-[9px] uppercase text-muted-foreground">
                             stored
                           </span>
                           <button
@@ -569,23 +578,25 @@ export function ConfigurePlatform({
                         </span>
                       )}
                     </div>
+                    {p.unavailable && <p className="text-[10px] text-muted-foreground">{p.unavailable}</p>}
                     <div className="mt-1 flex items-center gap-2">
                       <Input
                         type="password"
+                        disabled={!!p.unavailable}
                         value={val}
                         placeholder={p.placeholder}
                         aria-label={`${p.label} API key`}
                         onChange={(e) =>
                           setInputs((prev) => ({ ...prev, [p.id]: e.target.value }))
                         }
-                        className="h-8 flex-1 rounded-lg border-white/10 bg-white/5 text-xs"
+                        className="h-8 flex-1 rounded-lg border-border bg-secondary text-xs"
                       />
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
                         className="h-8"
-                        disabled={!val.trim() || savingRow === p.id}
+                        disabled={!!p.unavailable || !val.trim() || savingRow === p.id}
                         onClick={() => saveRow(p.id)}
                       >
                         {savingRow === p.id ? (
@@ -609,18 +620,18 @@ export function ConfigurePlatform({
                     aria-hidden
                     className={cn(
                       "h-1.5 w-1.5 shrink-0 rounded-full",
-                      customStored ? "bg-[#22D3EE]" : "bg-positive",
+                      customStored ? "bg-positive" : "bg-positive",
                     )}
                   />
                 )}
                 <span className="truncate text-xs font-medium">Custom model (OpenAI-compatible)</span>
                 {customSession && (
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-1.5 text-[9px] uppercase text-muted-foreground">
+                  <span className="shrink-0 rounded-full border border-border bg-secondary px-1.5 text-[9px] uppercase text-muted-foreground">
                     session
                   </span>
                 )}
                 {customStored && (
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-1.5 text-[9px] uppercase text-muted-foreground">
+                  <span className="shrink-0 rounded-full border border-border bg-secondary px-1.5 text-[9px] uppercase text-muted-foreground">
                     stored
                   </span>
                 )}
@@ -649,14 +660,14 @@ export function ConfigurePlatform({
                 placeholder="Base URL — e.g. https://openrouter.ai/api/v1"
                 aria-label="Custom model base URL"
                 onChange={(e) => setCustom((c) => ({ ...c, baseURL: e.target.value }))}
-                className="h-8 rounded-lg border-white/10 bg-white/5 text-xs"
+                className="h-8 rounded-lg border-border bg-secondary text-xs"
               />
               <Input
                 value={custom.model}
                 placeholder="Model ID — e.g. openai/gpt-4o-mini"
                 aria-label="Custom model id"
                 onChange={(e) => setCustom((c) => ({ ...c, model: e.target.value }))}
-                className="h-8 rounded-lg border-white/10 bg-white/5 text-xs"
+                className="h-8 rounded-lg border-border bg-secondary text-xs"
               />
               <div className="flex items-center gap-2">
                 <Input
@@ -665,7 +676,7 @@ export function ConfigurePlatform({
                   placeholder={customConfigured ? "API key — re-enter to update" : "API key"}
                   aria-label="Custom model API key"
                   onChange={(e) => setCustom((c) => ({ ...c, apiKey: e.target.value }))}
-                  className="h-8 flex-1 rounded-lg border-white/10 bg-white/5 text-xs"
+                  className="h-8 flex-1 rounded-lg border-border bg-secondary text-xs"
                 />
                 <Button
                   type="button"
@@ -685,7 +696,7 @@ export function ConfigurePlatform({
               </div>
               <p className="text-[10px] leading-snug text-muted-foreground/70">
                 Works with OpenRouter, OpenAI, Together, Fireworks, DeepSeek, local
-                Ollama/LM Studio. Used as an extra panelist; parsing &amp; scoring stay on Claude.
+                Ollama/LM Studio. Used as an extra panelist; parsing and scoring use the configured extraction method.
               </p>
             </div>
 
@@ -698,7 +709,7 @@ export function ConfigurePlatform({
                 clearSessionKeys();
                 setSession({});
                 setCustom({ baseURL: "", model: "", apiKey: "" });
-                clearCustomHint();
+                clearCustomHint(ownerId);
               }}
             >
               Clear session keys
@@ -709,7 +720,7 @@ export function ConfigurePlatform({
         {/* Card 3 · Self Host — informational, NOT a mode. Equal prominence. */}
         <section
           aria-label="Self Host"
-          className={cn(TIER1, "flex h-full flex-col gap-3 p-4 hover:border-white/[0.16]")}
+          className={cn(TIER1, "flex h-full flex-col gap-3 p-4 hover:border-border")}
         >
           <CardHead
             icon={Server}
@@ -741,7 +752,7 @@ export function ConfigurePlatform({
             href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/[0.12] bg-white/5 text-xs font-medium transition-colors hover:border-white/[0.25] hover:bg-white/[0.08]"
+            className="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-xs font-medium transition-colors hover:border-border hover:bg-secondary"
           >
             Open the repo <ExternalLink className="size-3.5" />
           </a>

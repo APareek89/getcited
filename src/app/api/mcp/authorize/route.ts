@@ -1,60 +1,25 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getUser } from "@/lib/auth";
-import { getClient, issueCode } from "@/lib/mcp/auth";
-import { publicOrigin } from "@/lib/http/origin";
-
-/**
- * OAuth authorization endpoint. The login gate is the user's GetCited Supabase
- * session (browser cookies) — no shared password (improvement over geo-radar's
- * Basic-auth gate): the one-time code, and later the JWT, are BOUND to the signed-in
- * user, so MCP tools act on that user's data only. Not signed in → redirect to
- * /login and bounce back here to finish the flow.
- */
-export async function GET(req: NextRequest) {
-  const p = req.nextUrl.searchParams;
-  const clientId = p.get("client_id") ?? "";
-  const redirectUri = p.get("redirect_uri") ?? "";
-  const state = p.get("state") ?? "";
-  const codeChallenge = p.get("code_challenge") ?? "";
-  const challengeMethod = p.get("code_challenge_method") ?? "S256";
-  const scopes = (p.get("scope") ?? "").split(" ").filter(Boolean);
-  const resource = p.get("resource") ?? undefined;
-
-  const fail = (error: string, description: string, status = 400) =>
-    NextResponse.json({ error, error_description: description }, { status });
-
-  if (!clientId || !redirectUri) return fail("invalid_request", "client_id and redirect_uri are required");
-  if ((p.get("response_type") ?? "code") !== "code") return fail("unsupported_response_type", "only code is supported");
-  if (!codeChallenge || challengeMethod !== "S256") return fail("invalid_request", "PKCE S256 code_challenge required");
-
-  const client = await getClient(clientId);
-  if (!client) return fail("invalid_client", "unknown client_id", 401);
-  if (!client.redirectUris.includes(redirectUri)) {
-    // Never redirect to an unregistered URI (open-redirect guard) — error inline.
-    return fail("invalid_request", "redirect_uri is not registered for this client");
-  }
-
-  // Login gate: the GetCited session. Preserve the FULL authorize URL through login.
-  const user = await getUser();
-  if (!user) {
-    // publicOrigin, NOT req.nextUrl: behind Render's proxy nextUrl's host is the
-    // internal bind address (localhost:$PORT) — a clone() here 307s to localhost.
-    const login = new URL("/login", publicOrigin(req));
-    login.searchParams.set("next", `${req.nextUrl.pathname}${req.nextUrl.search}`);
-    return NextResponse.redirect(login);
-  }
-
-  const code = await issueCode({
-    clientId,
-    userId: user.id,
-    redirectUri,
-    codeChallenge,
-    scopes,
-    resource,
-  });
-
-  const back = new URL(redirectUri);
-  back.searchParams.set("code", code);
-  if (state) back.searchParams.set("state", state);
-  return NextResponse.redirect(back);
+import {getClient,issueCode} from '@/lib/mcp/auth';
+import {actorFor} from '@/lib/server/auth';
+import {origin,csrfToken,requireCsrf,userLimit} from '@/lib/server/security';
+import {HttpError,readBytes,route} from '@/lib/server/http';
+function escape(s:string){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));}
+async function parameters(p:URLSearchParams){
+ const clientId=p.get('client_id')??'',redirectUri=p.get('redirect_uri')??'',codeChallenge=p.get('code_challenge')??'',state=p.get('state')??'';
+ if(p.get('response_type')!=='code'||p.get('code_challenge_method')!=='S256'||!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)||state.length>1000||p.get('resource')&&p.get('resource')!==origin()+'/mcp'||p.get('scope')&&p.get('scope')!=='mcp')throw new HttpError(400,'Invalid OAuth authorization request.');
+ const client=await getClient(clientId);if(!client?.redirectUris.includes(redirectUri))throw new HttpError(400,'Redirect URI is not registered.');
+ return {client,clientId,redirectUri,codeChallenge,state};
 }
+export const GET=route(async(req:Request)=>{
+ const url=new URL(req.url);if(url.search.length>8192)throw new HttpError(414,'Authorization request is too large.');
+ const p=await parameters(url.searchParams),actor=await actorFor(req);
+ if(!actor){const target=new URL('/login',origin());target.searchParams.set('next',url.pathname+url.search);return Response.redirect(target,303);}
+ const fields={client_id:p.clientId,redirect_uri:p.redirectUri,code_challenge:p.codeChallenge,code_challenge_method:'S256',response_type:'code',scope:'mcp',resource:origin()+'/mcp',state:p.state,csrf:csrfToken(undefined,'session:'+actor.sid)};
+ return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Connect GetCited</title><body style="font:16px system-ui;max-width:640px;margin:60px auto;padding:24px"><h1>Connect ${escape(p.client.name||'this MCP client')}?</h1><p>This client will be able to read your GetCited workspace, use your configured providers within your usage limits, and change your plans and tracker.</p><p>Account: ${escape(actor.email)}<br>Redirect: ${escape(p.redirectUri)}</p><form method="post">${Object.entries(fields).map(([k,v])=>`<input type="hidden" name="${k}" value="${escape(v)}">`).join('')}<button name="decision" value="approve">Allow access</button> <a href="/connector">Cancel</a></form></body></html>`,{headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer'}});
+});
+export const POST=route(async(req:Request)=>{
+ const actor=await actorFor(req);if(!actor)throw new HttpError(401,'Sign in to continue.');
+ const values=new URLSearchParams((await readBytes(req,8192)).toString('utf8')),h=new Headers(req.headers);h.set('x-getcited-csrf',values.get('csrf')??'');requireCsrf(new Request(req.url,{headers:h}),actor);await userLimit(actor,'oauth-consent',10,600);
+ if(values.get('decision')!=='approve')throw new HttpError(400,'Access was not approved.');
+ const p=await parameters(values),code=await issueCode({clientId:p.clientId,userId:actor.id,sessionId:actor.sid,redirectUri:p.redirectUri,codeChallenge:p.codeChallenge,scopes:['mcp'],resource:origin()+'/mcp'});
+ const target=new URL(p.redirectUri);target.searchParams.set('code',code);if(p.state)target.searchParams.set('state',p.state);return Response.redirect(target,303);
+});

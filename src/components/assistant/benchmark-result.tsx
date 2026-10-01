@@ -21,19 +21,22 @@ export interface BenchmarkOutput {
   report_id: string;
 }
 
-function pct(n: number) {
-  return `${Math.round(n * 100)}%`;
+function pct(n: number | undefined) {
+  return typeof n === "number" && Number.isFinite(n) ? `${Math.round(n * 100)}%` : "Unavailable";
 }
 
 export function BenchmarkResult({ data }: { data: BenchmarkOutput }) {
   const rows = [...(data.share_of_voice ?? [])].sort((a, b) => b.sov - a.sov);
   const yourSov = rows.find((r) => r.brand === data.brand)?.sov ?? 0;
+  const score = data.sentiment?.score;
+  const summaryAvailable = data.sentiment != null && Number.isFinite(data.your_citation_share)
+    && Number.isFinite(data.total_citations) && Number.isFinite(data.citation_gap_count);
   const sentLabel =
-    data.sentiment.score == null
+    score == null
       ? "n/a"
-      : data.sentiment.score > 0.2
+      : score > 0.2
         ? "positive"
-        : data.sentiment.score < -0.2
+        : score < -0.2
           ? "negative"
           : "neutral";
 
@@ -41,7 +44,7 @@ export function BenchmarkResult({ data }: { data: BenchmarkOutput }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
         <Kpi label="Your SoV" value={pct(yourSov)} />
-        <Kpi label="Citation share" value={pct(data.your_citation_share)} />
+        <Kpi label="Domain / citation share" value={pct(data.your_citation_share)} />
         <Kpi label="Sentiment" value={sentLabel} />
       </div>
 
@@ -62,7 +65,7 @@ export function BenchmarkResult({ data }: { data: BenchmarkOutput }) {
                 <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                   <div
                     className={isBrand ? "h-full rounded-full bg-aurora" : "h-full rounded-full"}
-                    style={{ width: pct(r.sov), ...(isBrand ? {} : { background: "rgba(255,255,255,0.14)" }) }}
+                    style={{ width: pct(r.sov), ...(isBrand ? {} : { background: "var(--bg-muted)" }) }}
                   />
                 </div>
               </div>
@@ -71,9 +74,11 @@ export function BenchmarkResult({ data }: { data: BenchmarkOutput }) {
         </div>
       </div>
 
+      <p className="text-xs text-muted-foreground">Domain-shaped text is unverified unless it is an actual provider source or a separately crawled page. This is a directional snapshot.</p>
+      {!summaryAvailable && <p className="text-xs text-muted-foreground">This saved result has no complete domain and sentiment summary. The recorded share of voice is shown above.</p>}
       <p className="text-xs text-muted-foreground">
-        {data.total_citations} citations across {data.answer_count} answers · {data.citation_gap_count}{" "}
-        answers cited others but not you · panel: {data.panel.join(", ")} · ~${data.cost_usd.toFixed(4)}
+        {summaryAvailable ? <>{data.total_citations} recorded domains/citations across {data.answer_count} answers · {data.citation_gap_count} answers named other domains but not yours · </> : null}
+        panel: {data.panel.join(", ")} · ~${data.cost_usd.toFixed(4)}
       </p>
     </div>
   );

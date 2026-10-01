@@ -17,6 +17,7 @@ export default async function LoginPage() {
         <div className="mb-8 text-center">
           <Link
             href="/"
+            aria-label="GetCited home"
             className="mx-auto mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-card"
           >
             <Sparkles className="h-5 w-5 text-primary" />

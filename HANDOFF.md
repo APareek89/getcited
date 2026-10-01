@@ -1,3 +1,25 @@
+# GetCited — launch checkpoint, 1 October 2026
+
+The current portfolio launch replaces the historical Supabase/Render account and Aurora UI assumptions below. Those entries are retained as history. Follow the current launch brief and README for the active architecture; do not reuse old credentials or run the old terminal-browser harness.
+
+Implemented and locally accepted; deployed health verified: Auth.js Credentials with owner-bound PostgreSQL data; rendered-owner/CSRF request checks; explicit MCP consent tied to the revocable session; permanent prepared config/run/plan/thread example; ordinary one-response OpenAI probe; shared Lovable light/dark UI with self-hosted Inter/Roboto Mono; preserved Configure/Agent/Dashboard/Tracker forms and actions. The default hosted provider is OpenAI GPT-4o mini. Groq’s retired route and unpriced Perplexity route are disabled.
+
+Original baseline passed 40 native tests, build/lint, 13 HTTP groups / 72 assertions and root browser Run mock audit. Final local verification passed 67 tests, including 13 client/card regressions; 23 actual PostgreSQL checks; two provider/metering fixtures; and 84 compiled Auth.js checks across 82 requests. Root browser verified the complete prepared benchmark/plan, six approved tracker rows, persisted status/remarks, PDF action, dark theme and a 390 px layout with no page overflow or console errors.
+
+AWS health now passes at https://getcited.3-6-183-210.sslip.io. Deployed image: `sha256:fa0b96e08a9a98b527d3192066c71862cc31a7c59e7af16d0024a444d267e02c`; source archive: `53756cab0b22e0c38ae190cca7c66ba3bdee384f20566d9b33b36e353f920d50`. Existing eight apps and the original Demo remained healthy with their container/process/configuration and certificate-account identities unchanged. Live free acceptance passed 36 checks / 39 requests with two accounts and zero provider calls. Root browser verified corrected signup/sign-in, prepared cards, six tracker rows, persisted status/remarks, both themes and 390 px layout with no console errors. The corrected paid probe and final saved-report browser/read-only audits passed. The final audit retained exactly two usage rows and the original failed attempt unchanged, with no extra provider calls.
+
+Prepared results are illustrative and free. A normal probe records one ungrounded model response; its literal domain matches are not verified citations. Share of voice uses total tracked-brand mentions as denominator. Plans retain assumptions/confidence and require explicit approval before Tracker writes. BYOK tab storage is owner-scoped, cleared on sign out/account changes, and may be restored by the browser; opt-in encrypted server storage is separate. Self Serve AI suggestions require stored credentials; chat and the explicit probe also accept the current owner’s tab credentials. The current schema is `migrations/001_portfolio.sql`; the historical Drizzle CLI/migrations are not the fresh deployment path.
+
+Text appears after each bounded provider completion so usage can be recorded before semantic parsing. Tool updates remain available; Stop aborts the in-flight transport. This is not a live token-by-token output claim.
+
+## Controlled paid result and retained failure
+
+The first 128-output-token request settled usage for 76 input / 128 output tokens, estimated USD 0.0000882, then failed before answer persistence. Truncation is the leading inference because it used the full allowance; the exact finish reason was not retained. Its failed run, claim and settled charge remain intact.
+
+The root-approved names-only correction used a 256-token ceiling and completed at 11:15:06.853–11:15:08.144 UTC on 1 October 2026: OpenAI GPT-4o mini, 75 input / 7 output / 0 cached / 0 reasoning tokens, estimated USD 0.00001545. Two billed requests total USD 0.00010365; there were no automatic retries. The successful response was stored as an owned report and restored after browser reload in dark and light themes with model, prompt and cost visible, no console errors and no extra provider calls. The earlier prepared plan remains separate; dashboard trends that include examples do not demonstrate market change. Supplied brand names make this a connectivity, metering and persistence check, not unbiased market visibility or a paid multi-provider/plan/crawl validation.
+
+## Historical handoff (preserved)
+
 # GetCited — Handoff
 
 > Fresh-session resume doc. Read this first. GetCited is a **private** Next.js/Vercel

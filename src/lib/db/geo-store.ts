@@ -1,126 +1,20 @@
-import "server-only";
-import { createServerSupabase } from "@/lib/supabase/server";
-import type {
-  GeoStore,
-  BeginRunParams,
-  BeginRunResult,
-  FinishRunParams,
-  StoredReport,
-} from "@/lib/geo/store";
-
-/**
- * Supabase-backed GeoStore, scoped to one user. Runs through the RLS-enforced server
- * client (the user's JWT from cookies), and always sets user_id on inserts to satisfy
- * the WITH CHECK policy. Used by real panel runs from the GEO Assistant.
- */
-export class SupabaseGeoStore implements GeoStore {
-  constructor(
-    private readonly userId: string,
-    private readonly configId: string | null = null,
-  ) {}
-
-  async beginRun(params: BeginRunParams): Promise<BeginRunResult> {
-    const supabase = await createServerSupabase();
-    const { data, error } = await supabase
-      .from("runs")
-      .insert({
-        user_id: this.userId,
-        config_id: params.configId ?? this.configId,
-        brand: params.brand,
-        brand_domains: params.brandDomains,
-        competitors: params.competitors,
-        panel: params.panel,
-        status: "running",
-      })
-      .select("id")
-      .single();
-    if (error) throw new Error(`beginRun failed: ${error.message}`);
-    return { runId: data.id as string };
-  }
-
-  async finishRun(runId: string, params: FinishRunParams): Promise<void> {
-    const supabase = await createServerSupabase();
-
-    if (params.answers.length > 0) {
-      const rows = params.answers.map((a) => ({
-        run_id: runId,
-        user_id: this.userId,
-        model: a.model,
-        prompt: a.prompt,
-        raw_answer: a.rawAnswer,
-        mentions: a.mentions,
-        cited_domains: a.citedDomains,
-        sentiment: a.sentiment,
-      }));
-      const { error: ansErr } = await supabase.from("answers").insert(rows);
-      if (ansErr) throw new Error(`finishRun(answers) failed: ${ansErr.message}`);
-    }
-
-    const { error: runErr } = await supabase
-      .from("runs")
-      .update({ status: "completed", cost_usd: params.costUsd, completed_at: new Date().toISOString() })
-      .eq("id", runId);
-    if (runErr) throw new Error(`finishRun(run) failed: ${runErr.message}`);
-
-    const { error: sovErr } = await supabase.from("sov_history").insert({
-      user_id: this.userId,
-      config_id: params.configId ?? this.configId,
-      run_id: runId,
-      date: params.date,
-      sov: params.sov,
-      sentiment_score: params.sentimentScore,
-    });
-    if (sovErr) throw new Error(`finishRun(sov_history) failed: ${sovErr.message}`);
-  }
-
-  async failRun(runId: string, error: string): Promise<void> {
-    const supabase = await createServerSupabase();
-    await supabase
-      .from("runs")
-      .update({ status: "failed", error, completed_at: new Date().toISOString() })
-      .eq("id", runId);
-  }
-
-  async getReport(runId: string): Promise<StoredReport | null> {
-    const supabase = await createServerSupabase();
-    const { data: run, error } = await supabase
-      .from("runs")
-      .select("*")
-      .eq("id", runId)
-      .maybeSingle();
-    if (error) throw new Error(`getReport failed: ${error.message}`);
-    if (!run) return null;
-
-    const { data: answers, error: ansErr } = await supabase
-      .from("answers")
-      .select("*")
-      .eq("run_id", runId)
-      .order("created_at", { ascending: true });
-    if (ansErr) throw new Error(`getReport(answers) failed: ${ansErr.message}`);
-
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    return {
-      run: {
-        id: run.id,
-        status: run.status,
-        panel: run.panel ?? [],
-        costUsd: run.cost_usd ?? 0,
-        error: run.error,
-        createdAt: run.created_at,
-        completedAt: run.completed_at,
-      },
-      brand: run.brand,
-      competitors: run.competitors ?? [],
-      brandDomains: run.brand_domains ?? [],
-      answers: (answers ?? []).map((a: any) => ({
-        model: a.model,
-        prompt: a.prompt,
-        rawAnswer: a.raw_answer,
-        mentions: a.mentions ?? [],
-        citedDomains: a.cited_domains ?? [],
-        sentiment: a.sentiment,
-      })),
-    };
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-  }
+import 'server-only';
+import {and,eq,asc} from 'drizzle-orm';
+import {drizzleDatabase,schema,ownerId} from './client';
+import {repositoryOwner} from '../auth';
+import {currentExecution} from '../server/execution';
+import {HttpError} from '../server/http';
+import type {GeoStore,BeginRunParams,BeginRunResult,FinishRunParams,StoredReport} from '../geo/store';
+import {getConfigById} from './configs';
+export class PostgresGeoStore implements GeoStore{
+ constructor(private readonly userId:string,private readonly configId:string|null=null){}
+ async beginRun(p:BeginRunParams):Promise<BeginRunResult>{const owner=await repositoryOwner(this.userId),db=await drizzleDatabase(),cfg=p.configId??this.configId;if(cfg&&!await getConfigById(cfg))throw new HttpError(404,'Configuration not found.');const [r]=await db.insert(schema.runs).values({userId:owner,configId:cfg,brand:p.brand,brandDomains:p.brandDomains,competitors:p.competitors,panel:p.panel,status:'running',prepared:currentExecution()?.mode==='prepared'}).returning({id:schema.runs.id});return {runId:r.id};}
+ async finishRun(id:string,p:FinishRunParams){const owner=await repositoryOwner(this.userId),db=await drizzleDatabase();if(p.answers.length>240||Buffer.byteLength(JSON.stringify(p))>512*1024)throw new HttpError(413,'Report is too large.');await db.transaction(async tx=>{
+ const [r]=await tx.select().from(schema.runs).where(and(eq(schema.runs.userId,owner),eq(schema.runs.id,ownerId(id)))).for('update');if(!r)throw new HttpError(404,'Report not found.');if(r.status==='completed')return;if(r.status!=='running')throw new HttpError(409,'This run is not active.');
+ if(p.answers.length)await tx.insert(schema.answers).values(p.answers.map(a=>({userId:owner,runId:id,model:a.model,prompt:a.prompt,rawAnswer:a.rawAnswer,mentions:a.mentions,citedDomains:a.citedDomains,sentiment:a.sentiment})));
+ await tx.update(schema.runs).set({status:'completed',costUsd:p.costUsd,completedAt:new Date()}).where(and(eq(schema.runs.userId,owner),eq(schema.runs.id,id)));
+ await tx.insert(schema.sovHistory).values({userId:owner,configId:r.configId,runId:id,date:p.date,sov:p.sov,sentimentScore:p.sentimentScore});
+ });}
+ async failRun(id:string,_error:string){const owner=await repositoryOwner(this.userId),db=await drizzleDatabase();await db.update(schema.runs).set({status:'failed',error:'The benchmark did not complete. Any dispatched usage is retained in the usage ledger.',completedAt:new Date()}).where(and(eq(schema.runs.userId,owner),eq(schema.runs.id,ownerId(id)),eq(schema.runs.status,'running')));}
+ async getReport(id:string):Promise<StoredReport|null>{const owner=await repositoryOwner(this.userId),db=await drizzleDatabase();const [r]=await db.select().from(schema.runs).where(and(eq(schema.runs.userId,owner),eq(schema.runs.id,ownerId(id))));if(!r)return null;const answers=await db.select().from(schema.answers).where(and(eq(schema.answers.userId,owner),eq(schema.answers.runId,id))).orderBy(asc(schema.answers.createdAt));return {run:{id:r.id,prepared:r.prepared,status:r.status,panel:r.panel,costUsd:r.costUsd,error:r.error,createdAt:r.createdAt.toISOString(),completedAt:r.completedAt?.toISOString()??null},brand:r.brand,competitors:r.competitors,brandDomains:r.brandDomains,answers:answers.map(a=>({model:a.model,prompt:a.prompt,rawAnswer:a.rawAnswer,mentions:a.mentions,citedDomains:a.citedDomains,sentiment:a.sentiment as StoredReport['answers'][number]['sentiment']}))};}
 }

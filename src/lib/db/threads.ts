@@ -1,103 +1,26 @@
-import "server-only";
-import type { UIMessage } from "ai";
-import { createServerSupabase } from "@/lib/supabase/server";
-
-export interface ThreadView {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export async function listThreads(): Promise<ThreadView[]> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("threads")
-    .select("id, title, created_at, updated_at")
-    .order("updated_at", { ascending: false })
-    .limit(50);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r: any) => ({
-    id: r.id,
-    title: r.title,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  }));
-}
-
-export async function createThread(userId: string, title: string): Promise<ThreadView> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("threads")
-    .insert({ user_id: userId, title: title.slice(0, 80) })
-    .select("id, title, created_at, updated_at")
-    .single();
-  if (error) throw new Error(error.message);
-  return { id: data.id, title: data.title, createdAt: data.created_at, updatedAt: data.updated_at };
-}
-
-export async function deleteThread(threadId: string): Promise<void> {
-  const supabase = await createServerSupabase();
-  await supabase.from("thread_messages").delete().eq("thread_id", threadId);
-  await supabase.from("threads").delete().eq("id", threadId);
-}
-
-export async function getThreadMessages(threadId: string): Promise<UIMessage[]> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("thread_messages")
-    .select("message_id, role, parts")
-    .eq("thread_id", threadId)
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r: any) => ({
-    id: r.message_id,
-    role: r.role,
-    parts: r.parts ?? [],
-  })) as UIMessage[];
-}
-
-/**
- * Replace a thread's messages with the given UIMessages (idempotent upsert of the
- * whole conversation — simplest correct persistence for the stateless chat route)
- * and bump updated_at. Also sets the title from the first user message when the
- * thread still has the default title.
- */
-export async function saveThreadMessages(
-  userId: string,
-  threadId: string,
-  messages: UIMessage[],
-): Promise<void> {
-  const supabase = await createServerSupabase();
-  await supabase.from("thread_messages").delete().eq("thread_id", threadId);
-  if (messages.length > 0) {
-    const rows = messages.map((m) => ({
-      thread_id: threadId,
-      user_id: userId,
-      message_id: m.id,
-      role: m.role,
-      parts: m.parts as unknown[],
-    }));
-    const { error } = await supabase.from("thread_messages").insert(rows);
-    if (error) throw new Error(error.message);
-  }
-  const firstUserText = firstText(messages);
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  const { data: t } = await supabase.from("threads").select("title").eq("id", threadId).maybeSingle();
-  if (t && t.title === "New thread" && firstUserText) {
-    patch.title = firstUserText.slice(0, 80);
-  }
-  await supabase.from("threads").update(patch).eq("id", threadId);
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-function firstText(messages: UIMessage[]): string | null {
-  for (const m of messages) {
-    if (m.role !== "user") continue;
-    for (const p of m.parts as { type: string; text?: string }[]) {
-      if (p.type === "text" && p.text) return p.text;
-    }
-  }
-  return null;
+import 'server-only';
+import type {UIMessage} from 'ai';
+import {and,eq,desc,asc,sql} from 'drizzle-orm';
+import {drizzleDatabase,schema,ownerId} from './client';
+import {repositoryOwner} from '../auth';
+import {HttpError} from '../server/http';
+export interface ThreadView{id:string;title:string;createdAt:string;updatedAt:string;prepared:boolean}
+function map(r:typeof schema.threads.$inferSelect):ThreadView{return {...r,createdAt:r.createdAt.toISOString(),updatedAt:r.updatedAt.toISOString()};}
+export async function listThreads():Promise<ThreadView[]>{const owner=await repositoryOwner(),db=await drizzleDatabase();return (await db.select().from(schema.threads).where(eq(schema.threads.userId,owner)).orderBy(desc(schema.threads.updatedAt)).limit(50)).map(map);}
+export async function getThread(id:string):Promise<ThreadView|null>{const owner=await repositoryOwner(),db=await drizzleDatabase();const [r]=await db.select().from(schema.threads).where(and(eq(schema.threads.userId,owner),eq(schema.threads.id,ownerId(id))));return r?map(r):null;}
+export async function createThread(userId:string,title:string,prepared=false):Promise<ThreadView>{const owner=await repositoryOwner(userId),db=await drizzleDatabase();const [r]=await db.insert(schema.threads).values({userId:owner,title:title.slice(0,80),prepared}).returning();return map(r);}
+export async function deleteThread(id:string){const owner=await repositoryOwner(),db=await drizzleDatabase();const t=await getThread(id);if(!t)throw new HttpError(404,'Thread not found.');if(t.prepared)throw new HttpError(409,'The prepared example is retained for reuse.');await db.delete(schema.threads).where(and(eq(schema.threads.userId,owner),eq(schema.threads.id,ownerId(id))));}
+export async function getThreadMessages(id:string):Promise<UIMessage[]>{const owner=await repositoryOwner(),db=await drizzleDatabase();if(!await getThread(id))throw new HttpError(404,'Thread not found.');return (await db.select().from(schema.threadMessages).where(and(eq(schema.threadMessages.userId,owner),eq(schema.threadMessages.threadId,ownerId(id)))).orderBy(asc(schema.threadMessages.createdAt)).limit(200)).map(r=>({id:r.messageId,role:r.role,parts:r.parts})) as UIMessage[];}
+export async function saveThreadMessages(userId:string,id:string,messages:UIMessage[],allowPrepared=false){
+ const owner=await repositoryOwner(userId),db=await drizzleDatabase();
+ if(messages.length>200||Buffer.byteLength(JSON.stringify(messages))>256*1024||new Set(messages.map(m=>m.id)).size!==messages.length||messages.some(m=>!['user','assistant','system'].includes(m.role)||typeof m.id!=='string'||m.id.length>200||!Array.isArray(m.parts)))throw new HttpError(413,'This thread reached its message limit. Start a new thread.');
+ await db.transaction(async tx=>{
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerId(id)},91092))`);
+  const [t]=await tx.select().from(schema.threads).where(and(eq(schema.threads.userId,owner),eq(schema.threads.id,id)));
+  if(!t)throw new HttpError(404,'Thread not found.');if(t.prepared&&!allowPrepared)throw new HttpError(409,'The prepared conversation is read-only.');
+  await tx.delete(schema.threadMessages).where(and(eq(schema.threadMessages.userId,owner),eq(schema.threadMessages.threadId,id)));
+  if(messages.length)await tx.insert(schema.threadMessages).values(messages.map((m,i)=>({userId:owner,threadId:id,messageId:m.id,role:m.role,parts:m.parts,createdAt:new Date(Date.now()+i)})));
+  const first=messages.find(m=>m.role==='user')?.parts.find(p=>p.type==='text');
+  await tx.update(schema.threads).set({updatedAt:new Date(),...(t.title==='New thread'&&first?.type==='text'?{title:first.text.slice(0,80)}:{})}).where(and(eq(schema.threads.userId,owner),eq(schema.threads.id,id)));
+ });
 }

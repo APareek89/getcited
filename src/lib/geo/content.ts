@@ -1,6 +1,7 @@
 import "server-only";
+import type { ProviderKeys } from "./types";
 import { generateText } from "ai";
-import { anthropicModel } from "./providers";
+import { defaultModel } from "./providers";
 
 /**
  * GEO content drafts — turns a plan tactic into ready-to-publish content (the
@@ -40,7 +41,7 @@ const STYLE: Record<ContentType, string> = {
 };
 
 export async function generateContent(params: {
-  anthropicKey: string;
+  keys: ProviderKeys;
   type: ContentType;
   topic: string;
   brand: string;
@@ -51,7 +52,7 @@ export async function generateContent(params: {
   planContext?: string;
 }): Promise<string> {
   const res = await generateText({
-    model: anthropicModel(CONTENT_MODEL_ID, params.anthropicKey),
+    model: defaultModel(params.keys),
     system:
       "You write GEO-optimized content: structured for AI assistants to quote (direct answers early, " +
       "clear headings, factual claims, FAQ blocks) while reading naturally for humans. Never fabricate " +
@@ -68,7 +69,9 @@ export async function generateContent(params: {
       (params.planContext ? `Plan context: ${params.planContext}\n` : "") +
       `\nTopic / assignment: ${params.topic}`,
     maxOutputTokens: 3000,
-    experimental_telemetry: { isEnabled: true, functionId: "content" },
+    maxRetries: 0,
+    experimental_telemetry: { isEnabled: false, functionId: "content" },
   });
+  if (["length","content-filter","error"].includes(res.finishReason) || !res.text.trim()) throw Error("Provider returned incomplete or refused text; usage was recorded and no retry was made.");
   return res.text;
 }

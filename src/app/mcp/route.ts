@@ -21,12 +21,18 @@ import {
   type PanelistId,
   type AnalysisAnswer,
 } from "@/lib/geo";
-import { serverProviderKeys, costCapUsd } from "@/lib/geo/keys";
+import { costCapUsd } from "@/lib/geo/keys";
 import { diagnoseFromReport } from "@/lib/geo/diagnose";
 import { generateRoadmap, type RoadmapDoc } from "@/lib/geo/roadmap";
 import { generateContent, CONTENT_TYPES } from "@/lib/geo/content";
 
-export const maxDuration = 300;
+import {resolveKeys} from "@/lib/server/keys";
+import {executionFor,runWithExecution,requireExecution} from "@/lib/server/execution";
+import {withCapacity} from "@/lib/server/usage";
+import {requireWorkspaceRoom} from "@/lib/server/workspace";
+import {readBytes,json,route,HttpError} from "@/lib/server/http";
+import {userLimit} from "@/lib/server/security";
+export const maxDuration = 180;
 
 /**
  * The GetCited MCP endpoint (streamable HTTP, stateless) — POST /mcp.
@@ -40,7 +46,7 @@ export const maxDuration = 300;
 
 function userIdOf(auth: AuthInfo | undefined): string | null {
   const sub = auth?.extra?.sub;
-  return typeof sub === "string" && sub.length > 10 ? sub : null;
+  return sub===requireExecution().ownerId?sub as string:null;
 }
 
 const handler = createMcpHandler(
@@ -74,6 +80,7 @@ const handler = createMcpHandler(
         if (!cfg) return text({ configured: false, message: "No config yet — fill in Configure in the GetCited app." });
         return text({
           configured: true,
+          prepared:cfg.prepared,
           brand: cfg.brandName || cfg.brandUrl,
           competitors: cfg.competitors,
           queries: cfg.queries,
@@ -88,14 +95,16 @@ const handler = createMcpHandler(
       "run_benchmark",
       "Run an AI panel → share-of-voice, citation share and sentiment for the brand vs competitors. Uses the saved config; costs a few cents (capped).",
       {
-        brand: z.string().optional().describe("Override the brand to measure."),
-        competitors: z.array(z.string()).optional(),
-        queries: z.array(z.string()).optional(),
+        brand: z.string().max(120).optional().describe("Override the brand to measure."),
+        competitors: z.array(z.string().max(300)).max(15).optional(),
+        queries: z.array(z.string().max(2000)).max(12).optional(),
       },
       async (args, extra) => {
         const userId = userIdOf(extra.authInfo);
         if (!userId) return text({ error: "No user context — install the connector via OAuth." });
         const cfg = await mcpActiveConfig(userId);
+        if(cfg?.prepared)throw new HttpError(409,'Prepared configuration is read-only. Save an ordinary version first.');
+        await requireWorkspaceRoom();
         const brand = args.brand || cfg?.brandName || cfg?.brandUrl;
         const competitors = args.competitors ?? cfg?.competitors ?? [];
         const queries = args.queries ?? cfg?.queries ?? [];
@@ -103,12 +112,12 @@ const handler = createMcpHandler(
         if (competitors.length === 0) return text({ error: "No competitors configured." });
         if (queries.length === 0) return text({ error: "No queries configured — add them in Configure." });
 
-        const keys = serverProviderKeys();
-        const panel: PanelistId[] = ["haiku"];
+        const keys = await resolveKeys(undefined,cfg?.mode);
+        const panel: PanelistId[] = [keys.openai?"openai":"haiku"];
         if (keys.perplexity) panel.push("perplexity");
         if (keys.custom) panel.push("custom");
         const store = new McpGeoStore(userId, cfg?.id ?? null);
-        const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys });
+        const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys,forceMock:requireExecution().mode==="mock",parserMode:"deterministic" });
         const out = await runner.run({
           brand,
           brand_domains: cfg?.brandDomains ?? [],
@@ -148,6 +157,7 @@ const handler = createMcpHandler(
         return text({
           report_id: report.report_id,
           status: report.status,
+          prepared:report.prepared,
           brand: report.brand,
           share_of_voice: report.share_of_voice,
           per_prompt: report.per_prompt,
@@ -161,9 +171,9 @@ const handler = createMcpHandler(
       "Build a costed action plan (greedy allocation within budget + person-hours) with a MODELED projection — assumptions listed, never a guarantee. Runs a fresh benchmark unless report_id is given.",
       {
         report_id: z.string().optional(),
-        budget_usd: z.number().optional(),
-        team_size: z.number().optional(),
-        timeline_weeks: z.number().optional(),
+        budget_usd: z.number().min(0).max(1000000).optional(),
+        team_size: z.number().int().min(1).max(100).optional(),
+        timeline_weeks: z.number().int().min(1).max(104).optional(),
       },
       async (args, extra) => {
         const userId = userIdOf(extra.authInfo);
@@ -174,15 +184,18 @@ const handler = createMcpHandler(
         const ownedDomains = cfg?.brandDomains ?? [];
 
         let report = args.report_id ? await buildReport(store, args.report_id) : null;
+        if(args.report_id&&!report)throw new HttpError(404,"Report not found.");
+        if(report?.prepared||cfg?.prepared)throw new HttpError(409,"Prepared evidence cannot trigger paid or crawl work.");
+        await requireWorkspaceRoom();
         if (!report) {
           if (!brand || !cfg?.competitors?.length || !cfg?.queries?.length) {
             return text({ error: "No config to benchmark from — fill in Configure first." });
           }
-          const keys = serverProviderKeys();
-          const panel: PanelistId[] = ["haiku"];
+          const keys = await resolveKeys(undefined,cfg?.mode);
+          const panel: PanelistId[] = [keys.openai?"openai":"haiku"];
           if (keys.perplexity) panel.push("perplexity");
           if (keys.custom) panel.push("custom");
-          const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys });
+          const runner = new InProcessPanelRunner(store, { costCapUsd: costCapUsd(), keys,forceMock:requireExecution().mode==="mock",parserMode:"deterministic" });
           const out = await runner.run({
             brand,
             brand_domains: ownedDomains,
@@ -212,7 +225,7 @@ const handler = createMcpHandler(
         let roadmapError: string | null = null;
         try {
           roadmap = await generateRoadmap({
-            anthropicKey: serverProviderKeys().anthropic!,
+            keys:await resolveKeys(undefined,cfg?.mode),
             brand,
             tactics: allocation.tactics,
             gaps: dx.gap,
@@ -221,8 +234,7 @@ const handler = createMcpHandler(
             teamSize: team,
           });
         } catch (e) {
-          roadmapError = e instanceof Error ? e.message : "unknown error";
-          console.error("[mcp build_plan] roadmap generation failed after retry:", roadmapError);
+          roadmapError = "Provider did not return a complete roadmap. Dispatched usage is recorded.";
         }
         const saved = await mcpSavePlan({
           userId,
@@ -263,7 +275,7 @@ const handler = createMcpHandler(
     server.tool(
       "approve_plan",
       "Approve a plan into the user's Tracker: one editable execution item per roadmap action, due dates derived from the plan creation date (week N due N×7 days later). Idempotent. Defaults to the latest plan. Only call when the user has explicitly approved.",
-      { plan_id: z.string().optional() },
+      { plan_id: z.string().optional(), confirm: z.literal(true) },
       async (args, extra) => {
         const userId = userIdOf(extra.authInfo);
         if (!userId) return text({ error: "No user context — install the connector via OAuth." });
@@ -304,17 +316,18 @@ const handler = createMcpHandler(
       "Write GEO-optimized content for a tactic: blog_post, comparison_page, reddit_answer, linkedin_post, guest_post_pitch, review_request_email, youtube_brief. Returns markdown.",
       {
         type: z.enum(CONTENT_TYPES),
-        topic: z.string().min(3).describe("The assignment, e.g. 'YourBrand vs Competitor comparison page'."),
+        topic: z.string().min(3).max(2000).describe("The assignment, e.g. 'YourBrand vs Competitor comparison page'."),
       },
       async (args, extra) => {
         const userId = userIdOf(extra.authInfo);
         if (!userId) return text({ error: "No user context — install the connector via OAuth." });
         const cfg = await mcpActiveConfig(userId);
         const plan = await mcpLatestPlan(userId);
-        const keys = serverProviderKeys();
-        if (!keys.anthropic) return text({ error: "Server Anthropic key missing." });
+        const keys = await resolveKeys(undefined,cfg?.mode);
+        if(cfg?.prepared||plan?.prepared)throw new HttpError(409,"Prepared context cannot trigger paid content generation.");
+        await requireWorkspaceRoom();
         const markdown = await generateContent({
-          anthropicKey: keys.anthropic,
+          keys,
           type: args.type,
           topic: args.topic,
           brand: cfg?.brandName || cfg?.brandUrl || "the brand",
@@ -350,9 +363,6 @@ function text(payload: unknown) {
  */
 const verifyToken = async (req: Request, bearer?: string): Promise<AuthInfo | undefined> => {
   if (!bearer) return undefined;
-  if (process.env.MCP_API_KEY && bearer === process.env.MCP_API_KEY) {
-    return { token: bearer, clientId: "api-key", scopes: [], extra: { sub: "api-key" } };
-  }
   try {
     const info = await verifyMcpToken(bearer, publicOrigin(req));
     return {
@@ -372,4 +382,13 @@ const authedHandler = withMcpAuth(handler, verifyToken, {
   resourceMetadataPath: "/.well-known/oauth-protected-resource",
 });
 
-export { authedHandler as GET, authedHandler as POST, authedHandler as DELETE };
+const protectedHandler=route(async(req:Request)=>{
+ const authorization=req.headers.get('authorization')??'';
+ if(!/^Bearer [A-Za-z0-9_.-]{1,4096}$/.test(authorization))return json({error:'Reconnect your MCP account.'},401,{'WWW-Authenticate':`Bearer resource_metadata="${publicOrigin()}/.well-known/oauth-protected-resource"`});
+ let actor;try{actor=await verifyMcpToken(authorization.slice(7));}catch{throw new HttpError(401,'Reconnect your MCP account.');}
+ await userLimit({id:actor.userId},'mcp',60,60);
+ let bounded=req;if(req.method==='POST'){const body=await readBytes(req,256*1024);bounded=new Request(req.url,{method:req.method,headers:req.headers,body});}
+ const context={...executionFor({id:actor.userId,sid:actor.sessionId}),grantId:actor.grantId};
+ return runWithExecution(context,()=>withCapacity(()=>authedHandler(bounded)));
+});
+export {protectedHandler as GET,protectedHandler as POST,protectedHandler as DELETE};

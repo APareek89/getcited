@@ -1,82 +1,43 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createGroq } from "@ai-sdk/groq";
-import { createPerplexity } from "@ai-sdk/perplexity";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { PanelistId, ProviderKeys } from "./types";
 import { PANELIST_MODELS } from "./models";
+import { meteredFetch, VERIFIED_PRICES } from "./provider-transport";
 
-/**
- * Build a Vercel AI SDK model for a panelist using a PER-CALL api key (never
- * process.env). Providers are constructed on each call because keys differ per
- * user; the call count per run is small so this is cheap. Throws if the key for
- * this panelist's provider is missing (the runner only calls this when it decided
- * the panelist runs for real).
- */
-export function panelistModel(id: PanelistId, keys: ProviderKeys): LanguageModel {
-  const { provider, modelId, keyField } = PANELIST_MODELS[id];
-  const apiKey = keys[keyField];
-  if (!apiKey) {
-    throw new Error(`Missing ${keyField} API key for panelist "${id}"`);
-  }
-  switch (provider) {
-    case "anthropic":
-      return createAnthropic({ apiKey })(modelId);
-    case "google":
-      return createGoogleGenerativeAI({ apiKey })(modelId);
-    case "groq":
-      return createGroq({ apiKey })(modelId);
-    case "perplexity":
-      return createPerplexity({ apiKey })(modelId);
-    case "custom": {
-      // The custom panelist stores all three fields as a JSON blob in keys.custom.
-      const cfg = parseCustomConfig(apiKey);
-      return createOpenAICompatible({ baseURL: cfg.baseURL, name: "custom", apiKey: cfg.apiKey })(
-        cfg.model,
-      );
-    }
-  }
+export function modelFor(modelId:string,keys:ProviderKeys):LanguageModel {
+ if(keys.shared!==false && modelId!=='gpt-4o-mini')throw Error('Hosted service supports GPT-4o mini; other models require your own key');
+ if(!VERIFIED_PRICES[modelId])throw Error('This model is unavailable: verified hosted pricing is required');
+ if(modelId==='gemini-2.5-flash-lite'){
+  if(!keys.gemini)throw Error('Gemini credentials are not configured');
+  return createGoogleGenerativeAI({apiKey:keys.gemini,fetch:meteredFetch({provider:'google',model:modelId,shared:false})})(modelId);
+ }
+ if(modelId.startsWith('gpt-')){
+  if(!keys.openai)throw Error('OpenAI credentials are not configured');
+  return createOpenAICompatible({name:'openai',supportsStructuredOutputs:true,includeUsage:true,baseURL:'https://api.openai.com/v1',apiKey:keys.openai,fetch:meteredFetch({provider:'openai',model:modelId,shared:keys.shared!==false})})(modelId);
+ }
+ if(!keys.anthropic)throw Error('Anthropic credentials are not configured');
+ return createAnthropic({apiKey:keys.anthropic,fetch:meteredFetch({provider:'anthropic',model:modelId,shared:keys.shared!==false})})(modelId);
 }
-
-/** Parsed shape of the custom OpenAI-compatible panelist config blob. */
-export interface CustomModelConfig {
-  baseURL: string;
-  model: string;
-  apiKey: string;
+export function defaultModel(keys:ProviderKeys):LanguageModel{return modelFor(keys.openai?'gpt-4o-mini':'claude-haiku-4-5',keys);}
+export function panelistModel(id:PanelistId,keys:ProviderKeys):LanguageModel {
+ if(id==='custom'){
+  const cfg=parseCustomConfig(keys.custom||'');
+  if(cfg.baseURL!=='https://api.openai.com/v1')throw Error('Custom endpoint is unsupported; use the verified OpenAI endpoint');
+  return modelFor(cfg.model,{openai:cfg.apiKey,shared:false});
+ }
+ return modelFor(PANELIST_MODELS[id].modelId,keys);
 }
-
-/**
- * Parse the `keys.custom` JSON blob into a {baseURL, model, apiKey}. Throws a clear
- * error if the blob is malformed or any field is missing, so a bad config surfaces
- * loudly instead of silently building an unusable model.
- */
-export function parseCustomConfig(blob: string): CustomModelConfig {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(blob);
-  } catch {
-    throw new Error("Custom model config is not valid JSON (expected {baseURL, model, apiKey})");
-  }
-  const cfg = parsed as Partial<CustomModelConfig>;
-  const baseURL = typeof cfg.baseURL === "string" ? cfg.baseURL.trim() : "";
-  const model = typeof cfg.model === "string" ? cfg.model.trim() : "";
-  const apiKey = typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "";
-  if (!baseURL || !model || !apiKey) {
-    const missing = [
-      !baseURL && "baseURL",
-      !model && "model",
-      !apiKey && "apiKey",
-    ]
-      .filter(Boolean)
-      .join(", ");
-    throw new Error(`Custom model config is missing: ${missing}`);
-  }
-  return { baseURL, model, apiKey };
+export interface CustomModelConfig {baseURL:string;model:string;apiKey:string;}
+export function parseCustomConfig(blob:string):CustomModelConfig {
+ let parsed:unknown;try{parsed=JSON.parse(blob);}catch{throw Error('Custom model config is not valid JSON');}
+ if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw Error('Custom model configuration is invalid');
+ const p=parsed as Partial<CustomModelConfig>;
+ const baseURL=typeof p.baseURL==='string'?p.baseURL.trim().replace(/\/$/,''):'';
+ const model=typeof p.model==='string'?p.model.trim():'';const apiKey=typeof p.apiKey==='string'?p.apiKey.trim():'';
+ if(!baseURL||!model||!apiKey||apiKey.length>4096||model.length>128)throw Error('Custom model config is missing or exceeds bounds');
+ return {baseURL,model,apiKey};
 }
-
-/** The Anthropic model used for parsing/scoring/hallucination checks (per-call key). */
-export function anthropicModel(modelId: string, apiKey: string): LanguageModel {
-  if (!apiKey) throw new Error("Missing Anthropic API key for the parser");
-  return createAnthropic({ apiKey })(modelId);
-}
+/** Compatibility for explicitly selected Anthropic paths. */
+export function anthropicModel(modelId:string,apiKey:string):LanguageModel {return modelFor(modelId,{anthropic:apiKey,shared:true});}

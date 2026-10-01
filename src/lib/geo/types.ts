@@ -3,7 +3,7 @@
  * API keys are passed per call (never read from process.env inside the pipeline).
  */
 
-export type PanelistId = "haiku" | "gemini" | "groq" | "perplexity" | "custom";
+export type PanelistId = "openai" | "haiku" | "gemini" | "groq" | "perplexity" | "custom";
 
 export type Sentiment = "positive" | "neutral" | "negative";
 
@@ -13,6 +13,9 @@ export type Sentiment = "positive" | "neutral" | "negative";
  * measurement code itself never touches process.env.
  */
 export interface ProviderKeys {
+  openai?: string;
+  /** Set only by trusted server credential resolution, never from a request. */
+  shared?: boolean;
   anthropic?: string;
   gemini?: string;
   groq?: string;
@@ -62,4 +65,6 @@ export interface MeasureOutput {
   created_at: string;
   /** Set when a panelist (e.g. a misconfigured custom model) was skipped mid-run. */
   panel_warning?: string;
+  parser_mode?: "deterministic" | "model";
+  provenance?: "sample" | "live";
 }

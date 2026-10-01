@@ -1,3 +1,7 @@
+import { ExampleButton } from "@/components/account/example-button";
+import { SavedReport } from "@/components/dashboard/saved-report";
+import { ReportDownload } from "@/components/account/report-download";
+import { PreparedNotice } from "@/components/account/prepared-notice";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -39,6 +43,7 @@ export default async function DashboardPage() {
             Run your first benchmark in the GEO Assistant to see your AI share-of-voice,
             citations, and a costed plan here.
           </p>
+          <div className="mt-5"><ExampleButton /></div>
           <ButtonLink href="/assistant" className="mt-6">
             Run your first benchmark <ArrowRight className="h-4 w-4" />
           </ButtonLink>
@@ -65,10 +70,13 @@ export default async function DashboardPage() {
         </ButtonLink>
       </div>
 
+      <PreparedNotice prepared={d.prepared} />
+      <p className="text-xs text-muted-foreground">Results are directional snapshots. Share of voice divides a brand’s answer mentions by total tracked-brand mentions. Domain text from an ungrounded model response is unverified, not a confirmed cited source.</p>
+      <SavedReport />
       {/* KPI cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi icon={TrendingUp} label="Share of voice" value={pct(k?.sov)} delta={k?.sovDelta} />
-        <Kpi icon={Target} label="Citation share" value={pct(k?.citationShare)} />
+        <Kpi icon={Target} label="Domain / citation share" value={pct(k?.citationShare)} />
         <Kpi
           icon={Quote}
           label="Sentiment"
@@ -82,7 +90,7 @@ export default async function DashboardPage() {
                   : "Neutral"
           }
         />
-        <Kpi icon={AlertTriangle} label="Hallucinations" value={String(k?.hallucinations ?? 0)} />
+        <Kpi icon={AlertTriangle} label="Claim flags" value={String(k?.hallucinations ?? 0)} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -116,7 +124,7 @@ export default async function DashboardPage() {
                   <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                     <div
                       className={isBrand ? "h-full rounded-full bg-aurora" : "h-full rounded-full"}
-                      style={{ width: pct(e.sov), ...(isBrand ? {} : { background: "rgba(255,255,255,0.14)" }) }}
+                      style={{ width: pct(e.sov), ...(isBrand ? {} : { background: "var(--bg-muted)" }) }}
                     />
                   </div>
                 </div>
@@ -261,14 +269,12 @@ function Kpi({
 
 function ReportChip({ planId, format, label }: { planId: string; format: string; label: string }) {
   return (
-    <a
-      href={`/api/report/plan/${planId}?format=${format}`}
-      target="_blank"
-      rel="noopener noreferrer"
+    <ReportDownload
+      planId={planId} format={format}
       className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs hover:bg-secondary"
     >
       {label}
-    </a>
+    </ReportDownload>
   );
 }
 

@@ -16,32 +16,26 @@ export function SovTrendChart({ data }: { data: { date: string; sov: number }[] 
     <div className="h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chart} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-          <defs>
-            <linearGradient id="sovAurora" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#7C3AED" />
-              <stop offset="100%" stopColor="#22D3EE" />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.10)" vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: "#93A0B4", fontSize: 11 }} axisLine={false} tickLine={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" vertical={false} />
+          <XAxis dataKey="date" tick={{ fill: "var(--fg-tertiary)", fontSize: 11 }} axisLine={false} tickLine={false} />
           <YAxis
             domain={[0, 100]}
-            tick={{ fill: "#93A0B4", fontSize: 11 }}
+            tick={{ fill: "var(--fg-tertiary)", fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v) => `${v}%`}
           />
           <RTooltip
             contentStyle={{
-              background: "#0C1120",
-              border: "1px solid rgba(255,255,255,0.12)",
+              background: "var(--bg-quaternary)",
+              border: "1px solid var(--border-primary)",
               borderRadius: 8,
-              color: "#EDF0F7",
+              color: "var(--fg-primary)",
               fontSize: 12,
             }}
             formatter={(value) => [`${Number(value)}%`, "Your SoV"]}
           />
-          <Line type="monotone" dataKey="sov" stroke="url(#sovAurora)" strokeWidth={2.5} dot={{ r: 3, fill: "#22D3EE" }} />
+          <Line type="monotone" dataKey="sov" stroke="var(--fg-accent)" strokeWidth={2.5} dot={{ r: 3, fill: "var(--fg-accent)" }} />
         </LineChart>
       </ResponsiveContainer>
     </div>

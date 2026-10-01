@@ -1,4 +1,5 @@
 "use client";
+import { useRequests } from "@/components/account/account-provider";
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -41,16 +42,16 @@ const DOMAIN_RE = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i;
 
 /* Glass depth system: Tier-1 section cards · Tier-2 recessed wells · Tier-3 chips. */
 const TIER1 =
-  "rounded-[20px] border border-white/[0.12] bg-white/[0.05] backdrop-blur-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.25)] transition-colors hover:border-white/[0.16]";
+  "rounded-[20px] border border-border bg-secondary  shadow-none transition-colors hover:border-border";
 const TIER2 =
-  "rounded-xl border border-white/[0.08] bg-white/[0.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
-const TIER3 = "rounded-full border border-white/10 bg-white/[0.06]";
+  "rounded-xl border border-border bg-secondary shadow-none";
+const TIER3 = "rounded-full border border-border bg-secondary";
 const MICRO_LABEL =
   "mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground";
 const FIELD =
-  "h-9 rounded-xl border-white/10 bg-white/5 placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-primary/50";
+  "h-9 rounded-xl border-border bg-secondary placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-primary/50";
 const AI_BTN =
-  "h-9 w-full justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/10 text-xs text-violet-200 transition-colors hover:border-violet-400/50 hover:bg-violet-500/20 disabled:pointer-events-none disabled:opacity-40";
+  "h-9 w-full justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-xs text-primary transition-colors hover:border-primary/40 hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40";
 
 function padTo<T>(arr: T[], n: number, fill: T): T[] {
   const out = [...arr];
@@ -150,8 +151,8 @@ function CardHead({
 }) {
   return (
     <div className="flex shrink-0 items-start gap-2.5">
-      <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-gradient-to-br from-[#7C3AED]/25 to-[#22D3EE]/10">
-        <Icon className="h-4 w-4 text-violet-300" />
+      <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-border bg-secondary">
+        <Icon className="h-4 w-4 text-primary" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -175,6 +176,7 @@ function CardHead({
 const COMPETITOR_PLACEHOLDERS = ["Competitor name or URL", "e.g. Linear", "e.g. Notion"];
 
 export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
+  const requests = useRequests();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [suggesting, setSuggesting] = useState(false);
@@ -224,6 +226,12 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
 
   // ── A · Save / dirty state ─────────────────────────────────────────────────
   const [savedVersion, setSavedVersion] = useState<number | null>(initial?.version ?? null);
+  const prepared = Boolean(initial?.prepared && savedVersion === initial.version);
+  const assistanceHint = prepared
+    ? "Save an edited configuration before using AI suggestions."
+    : mode === "self_serve"
+      ? "AI suggestions use your encrypted stored key. Tab-only keys work in chat and probes."
+      : "";
   const [chipKey, setChipKey] = useState(0);
   const [shaking, setShaking] = useState(false);
   const [snapshot, setSnapshot] = useState<string>(() =>
@@ -332,15 +340,16 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
 
   // ── AI actions ─────────────────────────────────────────────────────────────
   async function onSuggestCompetitors() {
-    if (!urlValid || discovering) return;
+    if (prepared || !urlValid || discovering) return;
     setDiscovering(true);
-    const res = await discoverCompetitorsAction({
+    const res = await requests.action(owner => discoverCompetitorsAction({
       brandUrl,
       brandName: brandName || undefined,
       description: description || undefined,
-    });
+    }, owner));
     setDiscovering(false);
-    if (!res.ok) {
+    if (!res) return;
+      if (!res.ok) {
       toast.error(res.error);
       return;
     }
@@ -376,15 +385,16 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
   }
 
   async function onGenerateQueries() {
-    if (!canGenerate || suggesting) return;
+    if (prepared || !canGenerate || suggesting) return;
     setSuggesting(true);
-    const res = await suggestQueriesAction({
+    const res = await requests.action(owner => suggestQueriesAction({
       brand: brandName || brandUrl,
       description: description || undefined,
       competitors: competitors.filter((c) => c.trim()),
-    });
+    }, owner));
     setSuggesting(false);
-    if (!res.ok) {
+    if (!res) return;
+      if (!res.ok) {
       toast.error(res.error);
       return;
     }
@@ -428,7 +438,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
       const kept = competitors
         .map((c, i) => ({ name: c.trim(), domain: competitorDomains[i] ?? "" }))
         .filter((c) => c.name);
-      const res = await saveConfigAction({
+      const res = await requests.action(owner => saveConfigAction({
         brandUrl,
         brandName: brandName || undefined,
         description: description || undefined,
@@ -439,7 +449,8 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
         teamSize: Math.round(numOr(teamSize, 2)),
         timelineWeeks: Math.round(numOr(timelineWeeks, 8)),
         mode: mode === "self_serve" ? "self_serve" : "we_serve",
-      });
+      }, owner));
+      if (!res) return;
       if (!res.ok) {
         toast.error(res.error); // verbatim server error; dirty state kept
         return;
@@ -511,7 +522,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
             {steps.map((done, i) => (
               <li
                 key={i}
-                className={cn("size-1.5 rounded-full", done ? "bg-aurora" : "bg-white/15")}
+                className={cn("size-1.5 rounded-full", done ? "bg-aurora" : "bg-secondary")}
               />
             ))}
           </ol>
@@ -528,7 +539,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                 ? "border-warning/30 bg-warning/10 text-warning"
                 : savedVersion !== null
                   ? "border-positive/30 bg-positive/10 text-positive"
-                  : "border-white/[0.12] bg-white/5 text-muted-foreground",
+                  : "border-border bg-secondary text-muted-foreground",
             )}
           >
             {isDirty ? (
@@ -553,7 +564,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
             className={cn(
               "h-9 min-w-24 rounded-full px-5 text-sm font-medium transition",
               isDirty
-                ? "bg-aurora text-white shadow-[0_0_18px_rgba(124,58,237,0.35)] hover:brightness-110 active:scale-[0.98]"
+                ? "bg-aurora text-white shadow-none hover:brightness-110 active:scale-[0.98]"
                 : "bg-transparent text-muted-foreground opacity-40 shadow-none",
             )}
           >
@@ -604,8 +615,8 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition",
                     active
-                      ? "border-transparent bg-aurora text-white shadow-[0_0_18px_rgba(124,58,237,0.35)]"
-                      : "border-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground",
+                      ? "border-transparent bg-aurora text-white shadow-none"
+                      : "border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -744,7 +755,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                 maxLength={1000}
                 placeholder="Issue tracking for modern software teams"
                 value={description}
-                className="h-14 min-h-0 resize-none rounded-xl border-white/10 bg-white/5 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="h-14 min-h-0 resize-none rounded-xl border-border bg-secondary text-sm placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-primary/50"
                 onChange={(e) => setDescription(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -899,7 +910,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
               type="button"
               variant="ghost"
               className={AI_BTN}
-              disabled={!urlValid || discovering}
+              disabled={prepared || !urlValid || discovering}
               onClick={onSuggestCompetitors}
             >
               {discovering ? (
@@ -910,8 +921,8 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
               {discovering ? "Finding competitors…" : "Suggest with AI"}
             </Button>
             {/* Static gate caption — never a tooltip, never a dead-click toast. */}
-            <p className="mt-1 h-4 text-[11px] text-muted-foreground">
-              {!urlValid ? "Add your site in step 1 to enable." : ""}
+            <p className="mt-1 min-h-4 text-[11px] text-muted-foreground">
+              {assistanceHint || (!urlValid ? "Add your site in step 1 to enable." : "")}
             </p>
           </div>
 
@@ -972,7 +983,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                     type="button"
                     onClick={() => removeCompetitor(i)}
                     aria-label="Remove competitor"
-                    className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/[0.06] hover:text-destructive focus-visible:opacity-100"
+                    className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-secondary hover:text-destructive focus-visible:opacity-100"
                   >
                     <X className="size-3.5" />
                   </button>
@@ -1027,7 +1038,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
               type="button"
               variant="ghost"
               className={AI_BTN}
-              disabled={!canGenerate || suggesting}
+              disabled={prepared || !canGenerate || suggesting}
               onClick={onGenerateQueries}
             >
               {suggesting ? (
@@ -1037,8 +1048,8 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
               )}
               {suggesting ? "Generating…" : "Generate from brand"}
             </Button>
-            <p className="mt-1 h-4 text-[11px] text-muted-foreground">
-              {!canGenerate ? "Needs step 1 first." : ""}
+            <p className="mt-1 min-h-4 text-[11px] text-muted-foreground">
+              {assistanceHint || (!canGenerate ? "Needs step 1 first." : "")}
             </p>
           </div>
 
@@ -1047,7 +1058,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
             <ScrollArea className="h-full px-2 py-1.5">
               {queries.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-                  <Sparkles className="h-4 w-4 text-violet-300/60" />
+                  <Sparkles className="h-4 w-4 text-primary" />
                   <p className="text-sm text-muted-foreground">No queries yet</p>
                   <p className="text-[11px] text-muted-foreground/70">
                     Generate from your brand above, or type one below.
@@ -1059,7 +1070,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
                     <li
                       key={`${i}-${q}`}
                       className={cn(
-                        "group flex items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-sm leading-snug transition-colors hover:bg-white/5",
+                        "group flex items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-sm leading-snug transition-colors hover:bg-secondary",
                         newFrom !== null &&
                           i >= newFrom &&
                           "animate-in fade-in slide-in-from-bottom-1 duration-300",
@@ -1081,7 +1092,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
               )}
             </ScrollArea>
             {overflowing && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-gradient-to-t from-[#0B1020]/80" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-background/80" />
             )}
           </div>
 
@@ -1110,7 +1121,7 @@ export function ConfigureForm({ initial }: { initial: ConfigView | null }) {
               {newQuery && (
                 <span
                   aria-hidden
-                  className="absolute top-1/2 right-3 -translate-y-1/2 rounded border border-white/10 px-1 text-[10px] text-muted-foreground/50"
+                  className="absolute top-1/2 right-3 -translate-y-1/2 rounded border border-border px-1 text-[10px] text-muted-foreground/50"
                 >
                   ↵
                 </span>

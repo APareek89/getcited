@@ -1,5 +1,8 @@
 import "server-only";
-import { createServerSupabase } from "@/lib/supabase/server";
+import {and,eq,desc,asc,sql} from "drizzle-orm";
+import {drizzleDatabase,schema,ownerId} from "./client";
+import {repositoryOwner} from "../auth";
+import {HttpError} from "../server/http";
 import { trackerRowsFromRoadmap } from "@/lib/geo/schedule";
 import type { PlanView } from "@/lib/db/plans";
 
@@ -24,100 +27,17 @@ export interface TrackerItemView {
   updatedAt: string;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function mapItem(r: any): TrackerItemView {
-  return {
-    id: r.id,
-    planId: r.plan_id,
-    week: r.week,
-    dueDate: r.due_date,
-    action: r.action,
-    ownerRole: r.owner_role,
-    hours: r.hours,
-    deliverable: r.deliverable,
-    status: r.status,
-    remarks: r.remarks,
-    updatedAt: r.updated_at,
-  };
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
-/**
- * Populate tracker_items from an approved plan's roadmap. Idempotent: a plan that
- * already has items is not re-inserted (the user's edits are the source of truth).
- */
-export async function approvePlanToTracker(
-  userId: string,
-  plan: PlanView,
-): Promise<{ created: number; alreadyApproved: boolean }> {
-  const supabase = await createServerSupabase();
-  const { count, error: countErr } = await supabase
-    .from("tracker_items")
-    .select("id", { count: "exact", head: true })
-    .eq("plan_id", plan.id);
-  if (countErr) throw new Error(countErr.message);
-  if ((count ?? 0) > 0) return { created: 0, alreadyApproved: true };
-
-  const rows = trackerRowsFromRoadmap(plan.createdAt, plan.roadmap);
-  if (rows.length === 0) return { created: 0, alreadyApproved: false };
-  const { error } = await supabase.from("tracker_items").insert(
-    rows.map((r) => ({
-      user_id: userId,
-      plan_id: plan.id,
-      week: r.week,
-      due_date: r.due_date,
-      action: r.action,
-      owner_role: r.owner_role,
-      hours: r.hours,
-      deliverable: r.deliverable,
-    })),
-  );
-  if (error) throw new Error(error.message);
-  return { created: rows.length, alreadyApproved: false };
+function mapItem(r:typeof schema.trackerItems.$inferSelect):TrackerItemView{return {...r,status:r.status as TrackerStatus,updatedAt:r.updatedAt.toISOString()};}
+export async function approvePlanToTracker(userId:string,plan:PlanView):Promise<{created:number;alreadyApproved:boolean}>{
+ const owner=await repositoryOwner(userId),db=await drizzleDatabase();return db.transaction(async tx=>{
+ await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerId(plan.id)},91094))`);
+ const [owned]=await tx.select().from(schema.plans).where(and(eq(schema.plans.userId,owner),eq(schema.plans.id,plan.id)));if(!owned)throw new HttpError(404,'Plan not found.');
+ if((await tx.select({id:schema.trackerItems.id}).from(schema.trackerItems).where(and(eq(schema.trackerItems.userId,owner),eq(schema.trackerItems.planId,plan.id))).limit(1)).length)return {created:0,alreadyApproved:true};
+ const rows=trackerRowsFromRoadmap(owned.createdAt,owned.roadmap);if(rows.length>200)throw new HttpError(413,'Plan has too many tracker actions.');
+ if(rows.length)await tx.insert(schema.trackerItems).values(rows.map(r=>({userId:owner,planId:plan.id,week:r.week,dueDate:r.due_date,action:r.action,ownerRole:r.owner_role,hours:r.hours,deliverable:r.deliverable})));
+ return {created:rows.length,alreadyApproved:false};});
 }
-
-export async function listTrackerItems(planId: string): Promise<TrackerItemView[]> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("tracker_items")
-    .select("*")
-    .eq("plan_id", planId)
-    .order("week", { ascending: true })
-    .order("due_date", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(mapItem);
-}
-
-/** The newest plan (by plans.created_at) that has tracker items, with its items. */
-export async function latestTrackedPlanItems(): Promise<{
-  planId: string;
-  items: TrackerItemView[];
-} | null> {
-  const supabase = await createServerSupabase();
-  const { data: plans, error: pErr } = await supabase
-    .from("plans")
-    .select("id")
-    .order("created_at", { ascending: false })
-    .limit(25);
-  if (pErr) throw new Error(pErr.message);
-  const { data: itemPlanIds, error: iErr } = await supabase
-    .from("tracker_items")
-    .select("plan_id");
-  if (iErr) throw new Error(iErr.message);
-  const tracked = new Set((itemPlanIds ?? []).map((r) => r.plan_id));
-  const planId = (plans ?? []).map((p) => p.id).find((id) => tracked.has(id));
-  if (!planId) return null;
-  return { planId, items: await listTrackerItems(planId) };
-}
-
-export async function updateTrackerItem(
-  id: string,
-  patch: { status?: TrackerStatus; remarks?: string },
-): Promise<void> {
-  const supabase = await createServerSupabase();
-  const { error } = await supabase
-    .from("tracker_items")
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
+export async function listTrackerItems(planId:string):Promise<TrackerItemView[]>{const owner=await repositoryOwner(),db=await drizzleDatabase();if(!(await db.select({id:schema.plans.id}).from(schema.plans).where(and(eq(schema.plans.userId,owner),eq(schema.plans.id,ownerId(planId))))).length)throw new HttpError(404,'Plan not found.');return (await db.select().from(schema.trackerItems).where(and(eq(schema.trackerItems.userId,owner),eq(schema.trackerItems.planId,planId))).orderBy(asc(schema.trackerItems.week),asc(schema.trackerItems.dueDate))).map(mapItem);}
+export async function latestTrackedPlanItems():Promise<{planId:string;items:TrackerItemView[]}|null>{const owner=await repositoryOwner(),db=await drizzleDatabase();const [row]=await db.select({id:schema.plans.id}).from(schema.plans).innerJoin(schema.trackerItems,and(eq(schema.trackerItems.planId,schema.plans.id),eq(schema.trackerItems.userId,owner))).where(eq(schema.plans.userId,owner)).orderBy(desc(schema.plans.createdAt)).limit(1);return row?{planId:row.id,items:await listTrackerItems(row.id)}:null;}
+export async function updateTrackerItem(id:string,patch:{status?:TrackerStatus;remarks?:string}){const owner=await repositoryOwner(),db=await drizzleDatabase();if(patch.status&&!isTrackerStatus(patch.status)||patch.remarks&&patch.remarks.length>2000)throw new HttpError(400,'Invalid tracker update.');const r=await db.update(schema.trackerItems).set({...patch,updatedAt:new Date()}).where(and(eq(schema.trackerItems.userId,owner),eq(schema.trackerItems.id,ownerId(id)))).returning({id:schema.trackerItems.id});if(!r.length)throw new HttpError(404,'Tracker item not found.');}

@@ -1,4 +1,5 @@
 "use client";
+import { useRequests } from "@/components/account/account-provider";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ const STATUS_STYLE: Record<TrackerStatus, string> = {
 
 /** Editable execution table: status dropdown + inline remarks, saved per change. */
 export function TrackerTable({ initialItems }: { initialItems: TrackerItemView[] }) {
+  const requests = useRequests();
   const [items, setItems] = useState(initialItems);
   const [, startTransition] = useTransition();
   const today = new Date().toISOString().slice(0, 10);
@@ -33,7 +35,8 @@ export function TrackerTable({ initialItems }: { initialItems: TrackerItemView[]
   function saveStatus(id: string, status: TrackerStatus, prev: TrackerStatus) {
     patchLocal(id, { status });
     startTransition(async () => {
-      const res = await updateTrackerItemAction({ id, status });
+      const res = await requests.action(owner => updateTrackerItemAction({ id, status }, owner));
+      if (!res) return;
       if (!res.ok) {
         patchLocal(id, { status: prev });
         toast.error(res.error);
@@ -45,7 +48,8 @@ export function TrackerTable({ initialItems }: { initialItems: TrackerItemView[]
     if (remarks === (prev ?? "")) return;
     patchLocal(id, { remarks });
     startTransition(async () => {
-      const res = await updateTrackerItemAction({ id, remarks });
+      const res = await requests.action(owner => updateTrackerItemAction({ id, remarks }, owner));
+      if (!res) return;
       if (!res.ok) {
         patchLocal(id, { remarks: prev });
         toast.error(res.error);
@@ -111,6 +115,8 @@ export function TrackerTable({ initialItems }: { initialItems: TrackerItemView[]
                         type="text"
                         defaultValue={i.remarks ?? ""}
                         placeholder="Add a remark…"
+                        aria-label="Item remarks"
+                        maxLength={2000}
                         onBlur={(e) => saveRemarks(i.id, e.target.value.trim(), i.remarks)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") (e.target as HTMLInputElement).blur();

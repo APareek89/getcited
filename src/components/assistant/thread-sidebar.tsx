@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 export interface ThreadItem {
   id: string;
+  prepared?: boolean;
   title: string;
   updatedAt: string;
 }
@@ -61,20 +62,20 @@ export function ThreadSidebar({
                   activeId === t.id ? "text-foreground" : "text-muted-foreground",
                 )}
               >
-                {t.title}
+                {t.title}{t.prepared ? " · Prepared" : ""}
               </span>
               <span className="block text-[10px] text-muted-foreground/60">
                 {new Date(t.updatedAt).toLocaleDateString()}
               </span>
             </button>
-            <button
+            {!t.prepared && <button
               type="button"
               onClick={() => onDelete(t.id)}
               className="hidden shrink-0 text-muted-foreground hover:text-danger group-hover:block"
               aria-label="Delete thread"
             >
               <Trash2 className="h-3 w-3" />
-            </button>
+            </button>}
           </div>
         ))}
       </div>

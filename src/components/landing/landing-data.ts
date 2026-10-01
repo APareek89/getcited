@@ -4,17 +4,17 @@
  * verbatim DOM parity Google requires.
  */
 
-export const SITE_URL = "https://geo-radar-mcp.onrender.com";
+export const SITE_URL = "https://getcited.3-6-183-210.sslip.io";
 
 export const PAGE_TITLE = "AI Visibility Tool — Get Your Brand Cited by AI | GetCited";
 
 export const PAGE_DESCRIPTION =
-  "See how AI assistants like Claude & Perplexity cite your brand, then get a costed action plan to close the gap. Free instant AI visibility audit — no signup.";
+  "Compare model answers about your brand, inspect a costed plan, and track execution. Free illustrative mock audit; saved prepared example after signup.";
 
 export const OG_TITLE = "GetCited — The AI Visibility Tool That Ends in a Plan, Not a Report";
 
 export const OG_DESCRIPTION =
-  "Run a real multi-LLM panel — Claude and Perplexity's answer engine, with Gemini and Llama-class models available. Get share of voice, citation share, sentiment — and a costed, trackable action plan. Free instant audit, no signup.";
+  "Explore prepared examples or run a configured OpenAI probe. Directional mention share, modeled plans, and an explicit execution tracker.";
 
 export interface Faq {
   q: string;
@@ -24,7 +24,7 @@ export interface Faq {
 export const FAQS: Faq[] = [
   {
     q: "What is AI visibility and how is it measured?",
-    a: "AI visibility is how often AI assistants — Claude, Perplexity's answer engine, and their peers — mention, cite, or recommend your brand when buyers ask real questions in your category. It's measured by running those buyer-intent questions across a panel of engines and recording three things: share of voice (how often you appear vs competitors), citation share (how often your pages are linked as sources), and sentiment (how you're described). GetCited measures it with a real multi-LLM panel, not a simulated score — and because one panel run is a snapshot, not a statistic, the report says so plainly instead of dressing the numbers up.",
+    a: "AI visibility is how often AI assistants — Claude, Perplexity's answer engine, and their peers — mention, cite, or recommend your brand when buyers ask real questions in your category. It's measured by running those buyer-intent questions across a panel of engines and recording three things: share of voice (how often you appear vs competitors), citation share (how often your pages are linked as sources), and sentiment (how you're described). GetCited provides labeled prepared examples and ordinary configured-model runs — and because one panel run is a snapshot, not a statistic, the report says so plainly instead of dressing the numbers up.",
   },
   {
     q: "What is generative engine optimization (GEO)?",
@@ -48,11 +48,11 @@ export const FAQS: Faq[] = [
   },
   {
     q: "How do I track my brand mentions across Claude and Perplexity?",
-    a: "Run the same buyer-intent questions across each engine, record every mention, citation, and sentiment signal, and benchmark the results against your competitors over time. Doing this manually is possible but slow. GetCited automates it as a multi-LLM panel — Claude and Perplexity by default, with Gemini and Llama-class models available on your keys — and reports AI share of voice and citation share aggregated across the panel. One run is a snapshot, not a statistic, and the report says so instead of pretending otherwise.",
+    a: "Run the same buyer-intent questions across each engine, record every mention, citation, and sentiment signal, and benchmark the results against your competitors over time. Doing this manually is possible but slow. GetCited automates it as a multi-LLM panel — OpenAI by default, with other supported providers available on configured keys — and reports AI share of voice and citation share aggregated across the panel. One run is a snapshot, not a statistic, and the report says so instead of pretending otherwise.",
   },
   {
     q: "What is AI share of voice?",
-    a: "AI share of voice is the percentage of AI answers in your category that mention or recommend your brand versus competitors. GetCited splits it into two metrics because they answer different questions: mention share (how often you're named at all) and citation share (how often your pages are linked as sources — the stronger signal, since it sends buyers to you). Both are aggregated across the panel and benchmarked against the competitors you configure.",
+    a: "GetCited computes AI share of voice as a brand’s answer mentions divided by total mentions across the tracked brands. GetCited splits it into two metrics because they answer different questions: mention share (how often you're named at all) and citation share (how often your pages are linked as sources — the stronger signal, since it sends buyers to you). Both are aggregated across the panel and benchmarked against the competitors you configure.",
   },
   {
     q: "How long does it take to improve AI visibility?",
@@ -64,10 +64,10 @@ export const FAQS: Faq[] = [
   },
   {
     q: "Can GetCited guarantee my brand gets cited by AI?",
-    a: "No — and you should be suspicious of any vendor who says yes, because these systems answer differently on every run and no one controls their outputs. Every projection GetCited produces is a modeled estimate with its assumptions stated and a confidence rating — low, medium, or high — attached. What we do commit to is verifiable: the measurement is a real multi-LLM panel, the plan is costed against your actual budget and team, and the tracker shows progress you can audit line by line.",
+    a: "No — and you should be suspicious of any vendor who says yes, because these systems answer differently on every run and no one controls their outputs. Every projection GetCited produces is a modeled estimate with its assumptions stated and a confidence rating — low, medium, or high — attached. What we do commit to is verifiable: ordinary measurements record actual configured-model responses, the plan is costed against your actual budget and team, and the tracker shows progress you can audit line by line.",
   },
   {
     q: "Do I need my own API keys, and what happens to my data?",
-    a: "You choose between two modes. We Serve runs the panel on GetCited's own keys and infrastructure — zero setup, transparently metered. Self Serve lets you bring your own provider keys, which are held in session memory only by default and discarded when your session ends; if you prefer convenience, you can opt in to AES-GCM encrypted storage and remove your keys at any time. Key values are never logged and never displayed back — the app only ever checks that a key is present.",
+    a: "You choose between two modes. We Serve runs the panel on GetCited's own keys and infrastructure — zero setup, transparently metered. Self Serve lets you bring your own provider keys, which are held in this tab’s session storage by default and cleared on sign out or account change (browsers may restore tab storage); if you prefer convenience, you can opt in to AES-GCM encrypted storage and remove your keys at any time. Key values are never logged and never displayed back — the app only ever checks that a key is present.",
   },
 ];

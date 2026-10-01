@@ -1,10 +1,3 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { publicOrigin } from "@/lib/http/origin";
-
-export async function POST(request: NextRequest) {
-  const supabase = await createServerSupabase();
-  await supabase.auth.signOut();
-  // publicOrigin, not request.url — behind Render's proxy Host is localhost:$PORT.
-  return NextResponse.redirect(new URL("/", publicOrigin(request)), { status: 303 });
-}
+import {json} from '@/lib/server/http';
+export async function GET(){return json({error:'Use email and password sign-in.'},410);}
+export const POST=GET;

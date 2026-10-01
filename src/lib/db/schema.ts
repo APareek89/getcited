@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   real,
+  numeric,
   integer,
   boolean,
   date,
@@ -13,13 +14,11 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * GetCited Postgres schema (Drizzle) on Supabase. Build spec §7.
+ * GetCited ordinary PostgreSQL schema. Auth identities and owner-parent keys
+ * are installed by migrations/001_portfolio.sql. Historical Supabase migrations
+ * under drizzle/ are retained for source history only.
  *
- * Every user-owned table carries `user_id` (= Supabase `auth.users.id`) and has
- * Row-Level Security enabled with `auth.uid() = user_id` policies (see the RLS
- * migration) so a user can only ever read/write their own rows. We deliberately do
- * NOT declare a cross-schema FK to `auth.users` in Drizzle — the link is enforced by
- * RLS + the `profiles` trigger in raw SQL. `text().array()` → Postgres `text[]`.
+ * Every business query explicitly binds the verified owner.
  */
 
 // profiles ↔ auth.users (id is the auth user id; row auto-created by a trigger)
@@ -37,6 +36,7 @@ export const configs = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull(),
     version: integer("version").notNull().default(1),
+    prepared: boolean("prepared").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     brandUrl: text("brand_url").notNull(),
     brandName: text("brand_name"),
@@ -86,13 +86,14 @@ export const runs = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull(),
     configId: uuid("config_id"),
+    prepared: boolean("prepared").notNull().default(false),
     brand: text("brand").notNull(),
     brandDomains: text("brand_domains").array().notNull().default([]),
     competitors: text("competitors").array().notNull().default([]),
     panel: text("panel").array().notNull().default([]),
     // queued | running | completed | failed
     status: text("status").notNull().default("queued"),
-    costUsd: real("cost_usd").notNull().default(0),
+    costUsd: numeric("cost_usd", { precision: 18, scale: 10, mode: "number" }).notNull().default(0),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -174,6 +175,7 @@ export const plans = pgTable(
     configId: uuid("config_id"),
     configVersion: integer("config_version"),
     runId: uuid("run_id"),
+    prepared: boolean("prepared").notNull().default(false),
     tactics: jsonb("tactics").$type<unknown[]>().notNull().default([]),
     projection: jsonb("projection").$type<Record<string, unknown>>(),
     // Week-by-week execution roadmap (LLM-expanded; manager-shareable in the docs).
@@ -225,6 +227,7 @@ export const threads = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull(),
+    prepared: boolean("prepared").notNull().default(false),
     title: text("title").notNull().default("New thread"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -7,6 +7,8 @@ import type { ProviderKeys } from "./types";
  */
 export function serverProviderKeys(): ProviderKeys {
   return {
+    shared: true,
+    openai: process.env.OPENAI_API_KEY || undefined,
     anthropic: process.env.ANTHROPIC_API_KEY || undefined,
     gemini: process.env.GEMINI_API_KEY || undefined,
     groq: process.env.GROQ_API_KEY || undefined,
@@ -23,6 +25,8 @@ export function serverProviderKeys(): ProviderKeys {
 export function mergeKeys(base: ProviderKeys, override?: Partial<ProviderKeys>): ProviderKeys {
   if (!override) return base;
   return {
+    shared: override.shared === false ? false : base.shared,
+    openai: override.openai || base.openai,
     anthropic: override.anthropic || base.anthropic,
     gemini: override.gemini || base.gemini,
     groq: override.groq || base.groq,
@@ -33,7 +37,7 @@ export function mergeKeys(base: ProviderKeys, override?: Partial<ProviderKeys>):
 
 /** How many panelists could run for real given these keys (for UX hints). */
 export function realPanelistCount(keys: ProviderKeys): number {
-  return [keys.anthropic, keys.gemini, keys.groq, keys.perplexity, keys.custom].filter(Boolean)
+  return [keys.openai, keys.anthropic, keys.gemini, keys.groq, keys.perplexity, keys.custom].filter(Boolean)
     .length;
 }
 

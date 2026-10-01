@@ -34,7 +34,7 @@ export function FinalCta() {
           </a>
           <ButtonLink
             href="/connector"
-            className="glass rounded-full border-0 bg-transparent px-6 py-4 text-foreground hover:bg-white/10"
+            className="glass rounded-full border-0 bg-transparent px-6 py-4 text-foreground hover:bg-secondary"
           >
             <LogoMark className="h-4 w-4" /> Add GetCited to Claude
           </ButtonLink>

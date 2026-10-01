@@ -1,199 +1,43 @@
-import "server-only";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { SignJWT, jwtVerify } from "jose";
-import { eq, lt } from "drizzle-orm";
-import { db, schema } from "@/lib/db/client";
-
-/**
- * Self-hosted OAuth for the MCP endpoint — ported from geo-radar-mcp
- * (apps/mcp-server/src/{self-oauth,auth}.ts) and adapted for GetCited:
- *
- *   Claude ─DCR POST /api/mcp/register─▶ us   (mint client_id, remember redirect_uris)
- *   Claude ─GET  /api/mcp/authorize───▶ us    (gate = the user's GetCited Supabase
- *                                              session, NOT a shared password → the
- *                                              issued token is BOUND to that user)
- *   Claude ─POST /api/mcp/token───────▶ us    (PKCE S256 verified → HS256 JWT)
- *   Claude ─POST /mcp      Bearer JWT─▶ us    (verify our own JWT; sub = user id)
- *
- * The tool endpoint is TOP-LEVEL /mcp (not /api/mcp) so the deployed URL equals
- * the legacy geo-radar connector URL https://geo-radar-mcp.onrender.com/mcp.
- *
- * Differences vs geo-radar: clients/codes live in Postgres (serverless-safe, not
- * in-memory Maps), and `sub` is the Supabase user id so MCP tools read that user's
- * data. Tokens signed with OAUTH_SIGNING_SECRET. No refresh tokens (Claude re-runs
- * the fast same-origin flow on expiry). Static MCP_API_KEY bypass kept for scripts.
- */
-
-const CODE_TTL_MS = 5 * 60_000;
-const DEFAULT_TOKEN_TTL_S = 604_800; // 7 days
-
-function signingKey(): Uint8Array {
-  const secret = process.env.OAUTH_SIGNING_SECRET || process.env.MCP_API_KEY;
-  if (!secret) throw new Error("OAUTH_SIGNING_SECRET is not set");
-  return new TextEncoder().encode(secret);
+import 'server-only';
+import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
+import {SignJWT,jwtVerify} from 'jose';
+import {query,transaction,ownerId} from '../db/client';
+import {authSecret,origin} from '../server/security';
+import {activeSession} from '../server/auth';
+import {HttpError} from '../server/http';
+export {publicOrigin} from '../http/origin';
+export function tokenTtlSeconds(){return 86400;}
+function signingKey(){return createHmac('sha256',authSecret()).update('getcited-mcp-access-v1').digest();}
+export interface McpClient{clientId:string;redirectUris:string[];name:string|null}
+export function validRedirect(value:unknown){if(typeof value!=='string'||value.length>2048)return false;try{const u=new URL(value);return !u.username&&!u.password&&!u.hash&&(u.protocol==='https:'||u.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(u.hostname));}catch{return false;}}
+export async function registerClient(name:string|null,redirectUris:string[]):Promise<McpClient>{
+ if(name!==null&&(typeof name!=='string'||name.length>120)||!Array.isArray(redirectUris)||redirectUris.length<1||redirectUris.length>4||!redirectUris.every(validRedirect))throw new HttpError(400,'Invalid OAuth client metadata.');
+ return transaction(async c=>{await c.query('select pg_advisory_xact_lock(91091004)');if((await c.query('select count(*)::int n from mcp_oauth_clients')).rows[0].n>=500)throw new HttpError(429,'OAuth registration capacity is reached.');const clientId='mcp_'+randomBytes(18).toString('base64url');await c.query('insert into mcp_oauth_clients(client_id,name,redirect_uris) values($1,$2,$3)',[clientId,name,redirectUris]);return {clientId,name,redirectUris};});
 }
-
-export function tokenTtlSeconds(): number {
-  return Number(process.env.OAUTH_TOKEN_TTL_SECONDS ?? DEFAULT_TOKEN_TTL_S) || DEFAULT_TOKEN_TTL_S;
+export async function getClient(id:string):Promise<McpClient|null>{if(!/^mcp_[A-Za-z0-9_-]{24}$/.test(id))return null;const r=(await query('select client_id,name,redirect_uris from mcp_oauth_clients where client_id=$1',[id])).rows[0];return r?{clientId:r.client_id,name:r.name,redirectUris:r.redirect_uris}:null;}
+export async function issueCode(p:{clientId:string;userId:string;sessionId:string;redirectUri:string;codeChallenge:string;scopes:string[];resource?:string}){
+ if(!/^[A-Za-z0-9_-]{43}$/.test(p.codeChallenge)||p.resource&&p.resource!==origin()+'/mcp'||p.scopes.some(s=>s!=='mcp'))throw new HttpError(400,'Invalid OAuth authorization request.');
+ if(!await activeSession(p.userId,p.sessionId))throw new HttpError(401,'Sign in to continue.');
+ const client=await getClient(p.clientId);if(!client?.redirectUris.includes(p.redirectUri))throw new HttpError(400,'Redirect URI is not registered.');
+ const code=randomBytes(32).toString('base64url');await transaction(async c=>{await c.query('delete from mcp_oauth_codes where expires_at<now()');if((await c.query('select count(*)::int n from mcp_oauth_codes where user_id=$1',[p.userId])).rows[0].n>=20)throw new HttpError(429,'Too many pending authorizations.');await c.query("insert into mcp_oauth_codes(code,client_id,user_id,session_id,redirect_uri,code_challenge,scopes,resource,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,now()+interval '5 minutes')",[createHash('sha256').update(code).digest('hex'),p.clientId,p.userId,p.sessionId,p.redirectUri,p.codeChallenge,['mcp'],origin()+'/mcp']);});return code;
 }
-
-function randomToken(bytes = 32): string {
-  return randomBytes(bytes).toString("base64url");
+export async function consumeCode(code:string,clientId:string,verifier:string,redirectUri:string){
+ if(!/^[A-Za-z0-9_-]{43}$/.test(code)||!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)||!validRedirect(redirectUri))throw new HttpError(400,'invalid_grant');
+ return transaction(async c=>{
+ const hash=createHash('sha256').update(code).digest('hex');const e=(await c.query('select * from mcp_oauth_codes where code=$1 for update',[hash])).rows[0];
+ const expected=createHash('sha256').update(verifier).digest('base64url');
+ if(!e||e.client_id!==clientId||e.redirect_uri!==redirectUri||new Date(e.expires_at).getTime()<=Date.now()||typeof e.code_challenge!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(e.code_challenge)||!timingSafeEqual(Buffer.from(expected),Buffer.from(e.code_challenge)))throw new HttpError(400,'invalid_grant');
+ const actor=(await c.query('select s.id from getcited_sessions s join getcited_users u on u.id=s.owner_id where s.id=$1 and s.owner_id=$2 and s.revoked_at is null and s.expires_at>now() and not u.disabled',[e.session_id,e.user_id])).rows[0];if(!actor)throw new HttpError(400,'invalid_grant');
+ await c.query('delete from mcp_oauth_codes where code=$1',[hash]);const grantId=randomUUID();await c.query("insert into getcited_mcp_grants(id,owner_id,session_id,client_id,expires_at) values($1,$2,$3,$4,now()+interval '1 day')",[grantId,e.user_id,e.session_id,e.client_id]);return {userId:e.user_id,sessionId:e.session_id,grantId,clientId:e.client_id,scopes:['mcp'],resource:origin()+'/mcp'};
+ });
 }
-
-/** Public origin of THIS deployment (issuer + audience) — see lib/http/origin. */
-export { publicOrigin } from "@/lib/http/origin";
-
-// ── DCR clients ───────────────────────────────────────────────────────────────
-export interface McpClient {
-  clientId: string;
-  redirectUris: string[];
+export async function signAccessToken(p:{userId:string;sessionId:string;grantId:string;clientId:string;scopes:string[]}){return new SignJWT({client_id:p.clientId,sid:p.sessionId,scope:'mcp'}).setProtectedHeader({alg:'HS256',typ:'JWT'}).setSubject(ownerId(p.userId)).setJti(ownerId(p.grantId)).setIssuer(origin()).setAudience(origin()+'/mcp').setIssuedAt().setExpirationTime(tokenTtlSeconds()+'s').sign(signingKey());}
+export async function verifyMcpToken(token:string,_issuer?:string){
+ if(token.length>4096)throw new HttpError(401,'Invalid access token.');
+ const {payload}=await jwtVerify(token,signingKey(),{issuer:origin(),audience:origin()+'/mcp',algorithms:['HS256']});
+ const userId=ownerId(payload.sub),sessionId=ownerId(payload.sid),grantId=ownerId(payload.jti);
+ if(payload.scope!=='mcp'||typeof payload.client_id!=='string'||!await activeSession(userId,sessionId))throw new HttpError(401,'Reconnect your MCP account.');
+ if(!(await query('select id from getcited_mcp_grants where id=$1 and owner_id=$2 and session_id=$3 and client_id=$4 and revoked_at is null and expires_at>now()',[grantId,userId,sessionId,payload.client_id])).rowCount)throw new HttpError(401,'Reconnect your MCP account.');
+ return {token,userId,sessionId,grantId,clientId:payload.client_id,scopes:['mcp'],expiresAt:payload.exp};
 }
-
-export async function registerClient(name: string | null, redirectUris: string[]): Promise<McpClient> {
-  const clientId = `mcp_${randomToken(12)}`;
-  await db.insert(schema.mcpOauthClients).values({ clientId, name, redirectUris });
-  return { clientId, redirectUris };
-}
-
-export async function getClient(clientId: string): Promise<McpClient | null> {
-  const rows = await db
-    .select()
-    .from(schema.mcpOauthClients)
-    .where(eq(schema.mcpOauthClients.clientId, clientId))
-    .limit(1);
-  const r = rows[0];
-  return r ? { clientId: r.clientId, redirectUris: r.redirectUris } : null;
-}
-
-// ── Authorization codes (one-time, PKCE-bound, user-bound) ───────────────────
-export interface IssueCodeParams {
-  clientId: string;
-  userId: string;
-  redirectUri: string;
-  codeChallenge: string;
-  scopes: string[];
-  resource?: string;
-}
-
-export async function issueCode(params: IssueCodeParams): Promise<string> {
-  const code = randomToken();
-  await db.insert(schema.mcpOauthCodes).values({
-    code,
-    clientId: params.clientId,
-    userId: params.userId,
-    redirectUri: params.redirectUri,
-    codeChallenge: params.codeChallenge,
-    scopes: params.scopes,
-    resource: params.resource ?? null,
-    expiresAt: new Date(Date.now() + CODE_TTL_MS),
-  });
-  // Opportunistic GC of expired codes.
-  await db.delete(schema.mcpOauthCodes).where(lt(schema.mcpOauthCodes.expiresAt, new Date()));
-  return code;
-}
-
-export interface ConsumedCode {
-  userId: string;
-  clientId: string;
-  scopes: string[];
-  resource: string | null;
-}
-
-/** Verify + consume a code (one-time use). Throws with an OAuth error message. */
-export async function consumeCode(
-  code: string,
-  clientId: string,
-  codeVerifier: string,
-  redirectUri?: string,
-): Promise<ConsumedCode> {
-  const rows = await db
-    .select()
-    .from(schema.mcpOauthCodes)
-    .where(eq(schema.mcpOauthCodes.code, code))
-    .limit(1);
-  const entry = rows[0];
-  // Delete immediately — a failed exchange must also burn the code (spec).
-  if (entry) await db.delete(schema.mcpOauthCodes).where(eq(schema.mcpOauthCodes.code, code));
-
-  if (!entry || entry.expiresAt.getTime() < Date.now()) {
-    throw new Error("invalid_grant: invalid or expired authorization code");
-  }
-  if (entry.clientId !== clientId) {
-    throw new Error("invalid_grant: code was issued to a different client");
-  }
-  if (redirectUri && redirectUri !== entry.redirectUri) {
-    throw new Error("invalid_grant: redirect_uri does not match the authorization request");
-  }
-  // PKCE S256: BASE64URL(SHA256(verifier)) must equal the stored challenge.
-  const expected = createHash("sha256").update(codeVerifier).digest("base64url");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(entry.codeChallenge);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    throw new Error("invalid_grant: PKCE verification failed");
-  }
-  return {
-    userId: entry.userId,
-    clientId: entry.clientId,
-    scopes: entry.scopes,
-    resource: entry.resource,
-  };
-}
-
-// ── Tokens ────────────────────────────────────────────────────────────────────
-export async function signAccessToken(params: {
-  issuer: string;
-  userId: string;
-  clientId: string;
-  scopes: string[];
-  resource?: string | null;
-}): Promise<string> {
-  return new SignJWT({ scope: params.scopes.join(" "), client_id: params.clientId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(params.userId)
-    .setIssuer(params.issuer)
-    .setAudience(params.resource ?? params.issuer)
-    .setIssuedAt()
-    .setExpirationTime(`${tokenTtlSeconds()}s`)
-    .sign(signingKey());
-}
-
-export interface McpAuthInfo {
-  token: string;
-  clientId: string;
-  scopes: string[];
-  expiresAt?: number;
-  /** The Supabase user id this token acts as. */
-  userId: string;
-}
-
-/** Verify a token WE issued (HS256). Issuer must be this deployment's origin. */
-export async function verifyMcpToken(token: string, issuer: string): Promise<McpAuthInfo> {
-  const { payload } = await jwtVerify(token, signingKey(), {
-    issuer: [issuer, `${issuer}/`],
-  });
-  if (!payload.sub) throw new Error("token has no subject");
-  const scopes = typeof payload.scope === "string" ? payload.scope.split(" ").filter(Boolean) : [];
-  return {
-    token,
-    clientId: (payload.client_id as string | undefined) ?? "self",
-    scopes,
-    expiresAt: typeof payload.exp === "number" ? payload.exp : undefined,
-    userId: payload.sub,
-  };
-}
-
-// ── RFC 8414 authorization-server metadata ────────────────────────────────────
-export function authorizationServerMetadata(origin: string): Record<string, unknown> {
-  return {
-    issuer: origin,
-    authorization_endpoint: `${origin}/api/mcp/authorize`,
-    token_endpoint: `${origin}/api/mcp/token`,
-    registration_endpoint: `${origin}/api/mcp/register`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: ["mcp"],
-  };
-}
+export function authorizationServerMetadata(base:string){return {issuer:base,authorization_endpoint:base+'/api/mcp/authorize',token_endpoint:base+'/api/mcp/token',registration_endpoint:base+'/api/mcp/register',response_types_supported:['code'],grant_types_supported:['authorization_code'],code_challenge_methods_supported:['S256'],token_endpoint_auth_methods_supported:['none'],scopes_supported:['mcp']};}

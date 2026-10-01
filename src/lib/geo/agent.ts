@@ -2,13 +2,13 @@ import "server-only";
 
 /** Agent (chat assistant) model registry — the model that drives the conversation. */
 export const AGENT_MODELS = {
+  "gpt-4o-mini": {label: "GPT-4o mini", hint: "Hosted default"},
   "claude-haiku-4-5": { label: "Claude Haiku 4.5", hint: "Fast · cheap" },
   "claude-sonnet-4-6": { label: "Claude Sonnet 4.6", hint: "Balanced" },
-  "claude-opus-4-8": { label: "Claude Opus 4.8", hint: "Most capable" },
 } as const;
 
 export type AgentModelId = keyof typeof AGENT_MODELS;
-export const DEFAULT_AGENT_MODEL: AgentModelId = "claude-sonnet-4-6";
+export const DEFAULT_AGENT_MODEL: AgentModelId = "gpt-4o-mini";
 
 export function isAgentModel(id: string): id is AgentModelId {
   return id in AGENT_MODELS;

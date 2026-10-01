@@ -1,8 +1,10 @@
 import "server-only";
-import { createServerSupabase } from "@/lib/supabase/server";
+import {eq,and,desc,asc} from "drizzle-orm";
+import {drizzleDatabase,schema} from "./client";
+import {repositoryOwner} from "../auth";
 import { getActiveConfig, type ConfigView } from "./configs";
 import { getLatestPlan, listPlans, type PlanView } from "./plans";
-import { SupabaseGeoStore } from "./geo-store";
+import { PostgresGeoStore } from "./geo-store";
 import {
   buildReport,
   computeCitations,
@@ -21,6 +23,7 @@ export interface DashboardKpis {
 
 export interface DashboardData {
   config: ConfigView | null;
+  prepared: boolean;
   hasRuns: boolean;
   kpis: DashboardKpis | null;
   leaderboard: ShareOfVoiceEntry[];
@@ -33,39 +36,13 @@ export interface DashboardData {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function loadDashboard(userId: string): Promise<DashboardData> {
-  const supabase = await createServerSupabase();
-  const config = await getActiveConfig();
-
-  // Latest two completed runs (KPIs + delta).
-  const { data: runRows } = await supabase
-    .from("runs")
-    .select("id, created_at, status")
-    .eq("status", "completed")
-    .order("created_at", { ascending: false })
-    .limit(2);
-  const runs = runRows ?? [];
-
-  // SoV trend.
-  const { data: sovRows } = await supabase
-    .from("sov_history")
-    .select("date, sov")
-    .order("date", { ascending: true })
-    .limit(60);
-  const trend = (sovRows ?? []).map((r: any) => ({ date: r.date, sov: r.sov }));
-
-  // Recent reports.
-  const { data: reportRows } = await supabase
-    .from("reports")
-    .select("id, kind, format, title, created_at")
-    .order("created_at", { ascending: false })
-    .limit(6);
-  const reports = (reportRows ?? []).map((r: any) => ({
-    id: r.id,
-    kind: r.kind,
-    format: r.format,
-    title: r.title,
-    createdAt: r.created_at,
-  }));
+  const owner=await repositoryOwner(userId),db=await drizzleDatabase();
+  const config=await getActiveConfig();
+  const runs=await db.select().from(schema.runs).where(and(eq(schema.runs.userId,owner),eq(schema.runs.status,'completed'))).orderBy(desc(schema.runs.createdAt)).limit(2);
+  const sovRows=await db.select().from(schema.sovHistory).where(eq(schema.sovHistory.userId,owner)).orderBy(asc(schema.sovHistory.date)).limit(60);
+  const trend=sovRows.map(r=>({date:r.date,sov:r.sov}));
+  const reportRows=await db.select().from(schema.reports).where(eq(schema.reports.userId,owner)).orderBy(desc(schema.reports.createdAt)).limit(6);
+  const reports=reportRows.map(r=>({...r,createdAt:r.createdAt.toISOString()}));
 
   const plan = await getLatestPlan();
   const plans = await listPlans(10);
@@ -75,9 +52,9 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   let lastRunAt: string | null = null;
 
   if (runs.length > 0) {
-    const store = new SupabaseGeoStore(userId);
+    const store = new PostgresGeoStore(userId);
     const latest = await buildReport(store, runs[0]!.id);
-    lastRunAt = runs[0]!.created_at;
+    lastRunAt = runs[0]!.createdAt.toISOString();
     if (latest) {
       leaderboard = [...latest.share_of_voice].sort((a, b) => b.sov - a.sov);
       const analysis: AnalysisAnswer[] = latest.answers.map((a) => ({
@@ -111,6 +88,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
 
   return {
     config,
+    prepared: Boolean(runs[0]?.prepared),
     hasRuns: runs.length > 0,
     kpis,
     leaderboard,

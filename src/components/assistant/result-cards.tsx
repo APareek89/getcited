@@ -1,4 +1,7 @@
 "use client";
+import { ReportDownload } from "@/components/account/report-download";
+import { PreparedNotice } from "@/components/account/prepared-notice";
+import { useRequests } from "@/components/account/account-provider";
 
 import { useState, useTransition } from "react";
 import {
@@ -111,6 +114,7 @@ interface RoadmapOverviewWeek {
 }
 
 export interface PlanOutput {
+  prepared?: boolean;
   plan_id: string;
   budget_usd: number;
   team_size: number;
@@ -149,20 +153,23 @@ export function PlanResult({ data }: { data: PlanOutput }) {
     }));
   const topTactics = data.tactics.slice(0, 3);
   const moreTactics = data.tactics.length - topTactics.length;
+  const allocationComplete = [data.spent_usd, data.budget_usd, data.spent_hours, data.person_hours]
+    .every((value) => typeof value === "number" && Number.isFinite(value));
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.12] bg-white/[0.04]">
+    <div className="overflow-hidden rounded-2xl border border-border bg-secondary">
+      <PreparedNotice prepared={data.prepared} />
       {/* Header */}
-      <div className="flex items-center gap-2.5 border-b border-white/[0.08] px-4 py-3">
+      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
         <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-aurora">
           <ClipboardList className="h-4 w-4 text-white" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">GEO Action Plan</div>
           <div className="truncate text-xs text-muted-foreground">
-            {data.tactics.length} tactics · ${data.spent_usd.toFixed(0)} of $
-            {data.budget_usd.toFixed(0)} · {Math.round(data.spent_hours)} of{" "}
-            {Math.round(data.person_hours)}h · {p.timelineWeeks}{" "}
+            {data.tactics.length} tactics · {allocationComplete
+              ? <>${data.spent_usd.toFixed(0)} of ${data.budget_usd.toFixed(0)} · {Math.round(data.spent_hours)} of {Math.round(data.person_hours)}h · </>
+              : <>Allocation totals unavailable in this saved card · </>}{p.timelineWeeks}{" "}
             {p.timelineWeeks === 1 ? "week" : "weeks"}
           </div>
         </div>
@@ -177,7 +184,7 @@ export function PlanResult({ data }: { data: PlanOutput }) {
       </div>
 
       {/* Projection strip */}
-      <div className="border-b border-white/[0.08] px-4 py-3">
+      <div className="border-b border-border px-4 py-3">
         <div className="flex items-baseline gap-2">
           <TrendingUp className="h-4 w-4 self-center text-primary" />
           <span className="text-2xl font-semibold tracking-tight">{pct(p.currentCitationShare)}</span>
@@ -246,9 +253,9 @@ export function PlanResult({ data }: { data: PlanOutput }) {
       </div>
 
       {/* Actions: approve is primary, downloads sit beside it */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.08] bg-white/[0.02] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border bg-secondary px-4 py-3">
         <ApproveButton planId={data.plan_id} />
-        <span className="mx-1 hidden h-5 w-px bg-white/10 sm:block" />
+        <span className="mx-1 hidden h-5 w-px bg-secondary sm:block" />
         <DownloadBtn planId={data.plan_id} format="docx" icon={FileText} label="Word" title="Full detail: WHAT/WHY/HOW/WHO + dates" />
         <DownloadBtn planId={data.plan_id} format="pdf" icon={FileType} label="PDF" />
         <DownloadBtn planId={data.plan_id} format="xlsx" icon={FileSpreadsheet} label="Excel" />
@@ -335,12 +342,14 @@ export function PlanResult({ data }: { data: PlanOutput }) {
 }
 
 function ApproveButton({ planId }: { planId: string }) {
+  const requests = useRequests();
   const [pending, startTransition] = useTransition();
   const [approved, setApproved] = useState(false);
 
   function approve() {
     startTransition(async () => {
-      const res = await approvePlanAction(planId);
+      const res = await requests.action(owner => approvePlanAction(planId, owner));
+      if (!res) return;
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -373,7 +382,7 @@ function ApproveButton({ planId }: { planId: string }) {
       type="button"
       onClick={approve}
       disabled={pending}
-      className="inline-flex items-center gap-1.5 rounded-full bg-aurora px-4 py-2 text-sm font-medium text-white shadow-[0_0_18px_rgba(124,58,237,0.35)] transition-opacity hover:opacity-90 disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-full bg-aurora px-4 py-2 text-sm font-medium text-white shadow-none transition-opacity hover:opacity-90 disabled:opacity-60"
     >
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
       Approve → add to Tracker
@@ -395,16 +404,13 @@ function DownloadBtn({
   title?: string;
 }) {
   return (
-    <a
-      href={`/api/report/plan/${planId}?format=${format}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={title}
-      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-white/[0.12]"
+    <ReportDownload
+      planId={planId} format={format} title={title}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
     >
       <Icon className="h-3.5 w-3.5 text-primary" />
       {label}
-    </a>
+    </ReportDownload>
   );
 }
 

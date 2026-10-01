@@ -1,8 +1,8 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { Sentiment } from "./types";
-import { anthropicModel } from "./providers";
-import { PARSER_MODEL_ID } from "./models";
+import { defaultModel } from "./providers";
+import type { ProviderKeys } from "./types";
 import type { TokenUsage } from "./panelist";
 
 export interface ParseContext {
@@ -15,6 +15,7 @@ export interface ParsedResult {
   citedDomains: string[];
   sentiment: Sentiment;
   usage: TokenUsage;
+  model: string;
 }
 
 /** Turns a raw AI answer into structured mentions/citations/sentiment. */
@@ -32,13 +33,13 @@ const ParseObjectSchema = z.object({
     .describe("Sentiment toward the PRIMARY brand when it is mentioned; neutral if absent."),
 });
 
-/** Real parser using an Anthropic model with structured output (per-call key). */
-export function createAnthropicParser(apiKey: string): Parser {
+/** Optional structured parser using the configured, metered provider. */
+export function createAnthropicParser(keys: ProviderKeys): Parser {
   return {
     async parse(answer: string, ctx: ParseContext): Promise<ParsedResult> {
       const candidates = [ctx.brand, ...ctx.competitors];
       const res = await generateObject({
-        model: anthropicModel(PARSER_MODEL_ID, apiKey),
+        model: defaultModel(keys),
         schema: ParseObjectSchema,
         system:
           "You extract structured data from an AI assistant's answer. Only report brands from " +
@@ -48,11 +49,13 @@ export function createAnthropicParser(apiKey: string): Parser {
           `Candidate brands: ${candidates.join(", ")}\n\n` +
           `Answer to analyze:\n"""${answer}"""`,
         maxOutputTokens: 400,
-        experimental_telemetry: { isEnabled: true, functionId: "parser" },
+        maxRetries: 0,
+        experimental_telemetry: { isEnabled: false, functionId: "parser" },
       });
       const usage: TokenUsage = {
         inputTokens: res.usage?.inputTokens ?? 0,
         outputTokens: res.usage?.outputTokens ?? 0,
+        cachedInputTokens:res.usage?.inputTokenDetails?.cacheReadTokens??0,
       };
       const allowed = new Set(candidates.map((c) => c.toLowerCase()));
       const mentions = res.object.mentioned_brands.filter((m) => allowed.has(m.toLowerCase()));
@@ -61,6 +64,7 @@ export function createAnthropicParser(apiKey: string): Parser {
         citedDomains: dedupe(res.object.cited_domains.map((d) => d.toLowerCase())),
         sentiment: res.object.sentiment,
         usage,
+        model:keys.openai?"gpt-4o-mini":"claude-haiku-4-5",
       };
     },
   };
@@ -87,7 +91,7 @@ export function createDeterministicParser(): Parser {
         : NEGATIVE.test(answer)
           ? "negative"
           : "neutral";
-      return { mentions, citedDomains, sentiment, usage: { inputTokens: 0, outputTokens: 0 } };
+      return { mentions, citedDomains, sentiment, model:"mock:deterministic-parser", usage: { inputTokens: 0, outputTokens: 0 } };
     },
   };
 }

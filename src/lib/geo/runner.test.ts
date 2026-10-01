@@ -8,7 +8,7 @@ describe("InProcessPanelRunner (mock mode, no keys)", () => {
     const store = new MemoryGeoStore();
     const runner = new InProcessPanelRunner(store, {
       costCapUsd: 1.0,
-      keys: {}, // no keys → mock panelists + deterministic parser
+      keys: {}, forceMock: true, // explicit prepared mock mode
     });
 
     const out = await runner.run({
@@ -53,25 +53,9 @@ describe("InProcessPanelRunner (mock mode, no keys)", () => {
     ).rejects.toThrow(/Workload too large/);
   });
 
-  it("a broken custom model is skipped (not fatal) and surfaces a panel_warning", async () => {
-    const store = new MemoryGeoStore();
-    // keys.custom is present (so custom is treated as REAL, not mock) but malformed,
-    // so building the custom panelist throws. haiku has no key → mock. The run must
-    // complete on the built-in panel and report the skip, never crash.
-    const runner = new InProcessPanelRunner(store, {
-      costCapUsd: 1.0,
-      keys: { custom: "not-valid-json" },
-    });
-    const out = await runner.run({
-      brand: "Acme",
-      competitors: ["Rival"],
-      prompt_set_id: "demo",
-      panel: ["haiku", "custom"],
-    });
-    expect(out.status).toBe("completed");
-    expect(out.panel_warning).toMatch(/custom model skipped/i);
-    // Only haiku (mock) produced answers — the broken custom contributed none.
-    expect(out.answer_count).toBe(4);
+  it("missing live keys fail closed rather than mixing samples into a real report", async () => {
+    const runner = new InProcessPanelRunner(new MemoryGeoStore(), {costCapUsd:1, keys:{custom:"not-valid-json"}});
+    await expect(runner.run({brand:"Acme",competitors:["Rival"],prompt_set_id:"demo",panel:["haiku","custom"]})).rejects.toThrow(/not configured/);
   });
 
   it("customSkipWarning redacts the key even when the endpoint reflects it (reviewer repro)", () => {

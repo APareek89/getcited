@@ -1,8 +1,9 @@
 import "server-only";
+import { safePublicGet } from "./safe-network";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "./providers";
-import { PARSER_MODEL_ID } from "./models";
+import { defaultModel } from "./providers";
+
 import type { ProviderKeys } from "./types";
 
 /**
@@ -31,16 +32,13 @@ const CompetitorsSchema = z.object({
 });
 
 /** Free Google Suggest autocomplete terms for a seed (no API key). Best-effort. */
-export async function googleSuggest(term: string, signal?: AbortSignal): Promise<string[]> {
+export async function googleSuggest(term: string): Promise<string[]> {
   try {
     const url = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(term)}`;
     // FMEA #5: cap the wait so a slow/unresponsive upstream can't hang the action.
-    const res = await fetch(url, {
-      headers: { "user-agent": "GetCited/1.0 (+https://getcited.app)" },
-      signal: signal ?? AbortSignal.timeout(3000),
-    });
+    const res = await safePublicGet(url, {timeoutMs:3000,maxBytes:128_000});
     if (!res.ok) return [];
-    const data = (await res.json()) as [string, string[]];
+    const data = JSON.parse(res.text) as [string, string[]];
     return Array.isArray(data?.[1]) ? data[1].slice(0, 10) : [];
   } catch {
     return [];
@@ -57,7 +55,7 @@ export interface SuggestQueriesInput {
 
 /** Claude-generated, Google-Suggest-grounded buyer-intent prompts. */
 export async function suggestQueries(input: SuggestQueriesInput): Promise<string[]> {
-  if (!input.keys.anthropic) throw new Error("Anthropic key required to suggest queries");
+
 
   const seeds = [input.category, input.brand, `best ${input.category ?? input.brand}`].filter(
     Boolean,
@@ -70,7 +68,7 @@ export async function suggestQueries(input: SuggestQueriesInput): Promise<string
     : "";
 
   const res = await generateObject({
-    model: anthropicModel(PARSER_MODEL_ID, input.keys.anthropic),
+    model: defaultModel(input.keys),
     schema: QueriesSchema,
     system:
       "You write buyer-intent prompts that a real buyer would ask an AI assistant (ChatGPT, " +
@@ -84,7 +82,8 @@ export async function suggestQueries(input: SuggestQueriesInput): Promise<string
       groundingBlock +
       `\nReturn 6–10 diverse buyer-intent prompts.`,
     maxOutputTokens: 500,
-    experimental_telemetry: { isEnabled: true, functionId: "suggest-queries" },
+    maxRetries: 0,
+    experimental_telemetry: { isEnabled: false, functionId: "suggest-queries" },
   });
   return dedupe(res.object.queries.map((q) => q.trim())).slice(0, 10);
 }
@@ -100,10 +99,10 @@ export interface DiscoverCompetitorsInput {
 export async function discoverCompetitors(
   input: DiscoverCompetitorsInput,
 ): Promise<{ name: string; url: string }[]> {
-  if (!input.keys.anthropic) throw new Error("Anthropic key required to discover competitors");
+
 
   const res = await generateObject({
-    model: anthropicModel(PARSER_MODEL_ID, input.keys.anthropic),
+    model: defaultModel(input.keys),
     schema: CompetitorsSchema,
     system:
       "You identify direct competitors of a company from its website. Return well-known, real " +
@@ -114,7 +113,8 @@ export async function discoverCompetitors(
       (input.description ? `What they do: ${input.description}\n` : "") +
       `\nReturn up to 5 direct competitors.`,
     maxOutputTokens: 400,
-    experimental_telemetry: { isEnabled: true, functionId: "discover-competitors" },
+    maxRetries: 0,
+    experimental_telemetry: { isEnabled: false, functionId: "discover-competitors" },
   });
   const brandHost = safeHost(input.brandUrl);
   return res.object.competitors

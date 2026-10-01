@@ -36,6 +36,7 @@ export interface FinishRunParams {
 export interface StoredReport {
   run: {
     id: string;
+    prepared?: boolean;
     status: string;
     panel: string[];
     costUsd: number;

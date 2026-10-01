@@ -6,7 +6,7 @@ import { Plug, Terminal, ShieldCheck, Copy, Check } from "lucide-react";
 const TOOLS = [
   { name: "ping", desc: "Health check — verifies the connector is wired and authenticated." },
   { name: "get_active_config", desc: "Load your saved brand, competitors, queries, budget and team." },
-  { name: "run_benchmark", desc: "Run an AI panel → share-of-voice, citation share, sentiment. Costs a few cents (capped)." },
+  { name: "run_benchmark", desc: "Run an AI panel → share-of-voice, citation share, sentiment. Uses your bounded provider allowance." },
   { name: "get_report", desc: "Fetch a previous benchmark report by report_id." },
   { name: "build_plan", desc: "Costed action plan + modeled projection (assumptions listed, never a guarantee)." },
   { name: "get_latest_plan", desc: "Fetch your most recent plan (tactics, projection, roadmap)." },
@@ -83,8 +83,8 @@ export function McpPanel() {
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-positive" />
         <span>
           Auth is OAuth 2.0 with PKCE (dynamic client registration) — this app is its own
-          authorization server; tokens are signed JWTs bound to your user id, expire in 7 days,
-          and are only accepted by this deployment. Note: Claude&apos;s hosted connectors need a
+          authorization server; access expires after 24 hours and is bound to your account and revocable sign-in session,
+          and tokens are accepted only by this deployment. Signing out revokes that session’s access; reconnect and approve access again. Note: Claude&apos;s hosted connectors need a
           public HTTPS URL — deploy first (or tunnel) for claude.ai; localhost works for local
           MCP clients.
         </span>
@@ -107,9 +107,7 @@ export function McpPanel() {
           <Terminal className="h-3.5 w-3.5" /> Scripted access (optional)
         </h2>
         <p className="text-xs text-muted-foreground">
-          For CI/scripts, set <code className="text-primary">MCP_API_KEY</code> in the server env and send{" "}
-          <code className="text-primary">Authorization: Bearer &lt;key&gt;</code> — note API-key calls have
-          no user context (user-scoped tools will ask you to use OAuth).
+          Use an OAuth-capable MCP client. Approve access explicitly in your GetCited account; account data is never exposed by a shared anonymous script key.
         </p>
       </section>
     </div>

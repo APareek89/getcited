@@ -4,8 +4,8 @@ import { Check, Server, KeyRound, Lock } from "lucide-react";
 
 const COMMITMENT_CARDS = [
   {
-    title: "The measurement is real.",
-    text: "A live multi-LLM panel answering buyer-intent queries — single-run by default, and labeled that way. No simulated scores, no proprietary index you have to take on faith.",
+    title: "Know what was measured.",
+    text: "Prepared examples are illustrative and free. Ordinary probes record an actual configured-model response; a single response is directional, not market research.",
   },
   {
     title: "The plan is costed.",
@@ -20,10 +20,10 @@ const COMMITMENT_CARDS = [
 const SPEC_SHEET = [
   ["queries", "Buyer-intent questions for your category; you see the full list before any run."],
   ["runs", "Single-run panels by default — reported as directional, never dressed up as statistics."],
-  ["engines", "Claude + Perplexity by default; results aggregated across the panel. Gemini and Llama-class models available with your keys."],
+  ["engines", "Hosted default: OpenAI GPT-4o mini. Other explicitly supported providers require configured keys."],
   [
     "scoring",
-    "Mention share, citation share, and sentiment — simple transparent ratios (mentions over total answers), no black-box scores.",
+    "Share of voice = a brand’s answer mentions / total mentions across tracked brands. Ungrounded domain mentions are unverified; projections are modeled estimates.",
   ],
   [
     "confidence",
@@ -168,7 +168,7 @@ export function KeyCustody() {
           </p>
           <ul className="mt-5 space-y-3">
             {[
-              "Your provider keys are held in session memory only by default — gone when your session ends.",
+              "Your provider keys are held in this tab’s session storage by default — gone when your session ends.",
               "Prefer convenience? Opt in to encrypted storage: AES-GCM, encrypted at rest, removable any time.",
               "Key values are never logged and never displayed back; the app only ever checks that a key is present.",
             ].map((f) => (

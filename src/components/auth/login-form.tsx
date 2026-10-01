@@ -1,122 +1,44 @@
 "use client";
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useRef, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useAccount, authForm } from '@/components/account/account-provider';
+import { safeNext, StaleResponse } from '@/lib/client/identity';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { createBrowserSupabase } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Mail, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-      <path
-        fill="#EA4335"
-        d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.9 3.6 14.7 2.7 12 2.7 6.9 2.7 2.7 6.9 2.7 12S6.9 21.3 12 21.3c6 0 9.3-4.2 9.3-9.6 0-.6-.1-1.1-.2-1.5H12z"
-      />
-    </svg>
-  );
-}
-
-export function LoginForm() {
-  const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/configure";
-  const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [sent, setSent] = useState(false);
-
-  const redirectTo =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-      : undefined;
-
-  async function signInWithGoogle() {
-    setGoogleLoading(true);
-    const supabase = createBrowserSupabase();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo },
-    });
-    if (error) {
-      toast.error(error.message);
-      setGoogleLoading(false);
-    }
+export function LoginForm({ signup = false }: { signup?: boolean }) {
+  const account = useAccount(); const params = useSearchParams(); const mounted = useRef(true);
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); if (busy) return; setError('');
+    if (new TextEncoder().encode(password).length > 72 || (signup && password.length < 12)) { setError('Use at least 12 characters and at most 72 UTF-8 bytes.'); return; }
+    setBusy(true); const ticket = account.identity.capture(); const current = () => mounted.current && account.identity.current(ticket);
+    try {
+      const session = await account.refresh(); if (!current()) throw new StaleResponse(); if (!session) throw new Error('Account service unavailable. Please retry.');
+      if (signup) {
+        const response = await fetch('/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json', 'X-GetCited-CSRF': session.csrf }, body: JSON.stringify({ email, password }) });
+        const result = await response.json().catch(() => null); if (!current()) throw new StaleResponse();
+        if (!response.ok) throw new Error(result?.code === 'account_exists' ? 'An account already exists for this email. Sign in instead.' : response.status === 429 ? 'Please wait before trying again.' : result?.error || 'Account creation failed. Please retry.');
+      }
+      await authForm('callback/credentials', { email, password }, current); if (!current()) return;
+      const verified = await account.refresh(); if (!mounted.current) return;
+      if (!verified?.user || verified.user.email.toLowerCase() !== email.trim().toLowerCase()) throw new Error('Sign-in could not be verified. Please retry.');
+      setPassword(''); try { localStorage.setItem('getcited-account-change', String(Date.now())); } catch {}
+      window.location.replace(safeNext(params.get('next')));
+    } catch (e) { if (mounted.current && !(e instanceof StaleResponse)) setError(e instanceof Error ? e.message : 'Account request failed.'); }
+    finally { if (mounted.current) setBusy(false); }
   }
-
-  async function signInWithEmail(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email) return;
-    setSending(true);
-    const supabase = createBrowserSupabase();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
-    });
-    setSending(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    setSent(true);
-    toast.success("Magic link sent — check your inbox.");
-  }
-
-  return (
-    <div className="w-full max-w-sm space-y-6">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={signInWithGoogle}
-        disabled={googleLoading}
-      >
-        {googleLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <GoogleIcon />
-        )}
-        Continue with Google
-      </Button>
-
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted-foreground">or</span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
-      {sent ? (
-        <div className="rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
-          <Mail className="mx-auto mb-2 h-5 w-5 text-primary" />
-          We emailed a magic link to <span className="text-foreground">{email}</span>.
-          Click it to sign in.
-        </div>
-      ) : (
-        <form onSubmit={signInWithEmail} className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={sending}>
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-            Send magic link
-          </Button>
-        </form>
-      )}
-
-      <p className="text-center text-xs text-muted-foreground">
-        No password needed. We&apos;ll email you a one-time sign-in link.
-      </p>
-    </div>
-  );
+  return <div className="space-y-5"><form onSubmit={submit} className="space-y-4">
+    <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" required autoComplete="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></div>
+    <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" required minLength={signup ? 12 : undefined} maxLength={72} autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} />{signup && <p className="text-xs text-muted-foreground">At least 12 characters.</p>}</div>
+    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    <Button className="w-full" type="submit" disabled={busy}>{busy && <Loader2 className="size-4 animate-spin" />}{busy ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}</Button>
+  </form><Button variant="outline" className="w-full" disabled>Google · Not configured</Button>
+    <p className="text-center text-sm"><Link className="text-primary underline" href={signup ? '/login' : '/signup'}>{signup ? 'Already have an account? Sign in' : 'New here? Create an account'}</Link></p>
+    <p className="text-center text-xs text-muted-foreground">Password-reset email is not configured for this launch.</p>
+  </div>;
 }

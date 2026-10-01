@@ -2,8 +2,8 @@ import { MODEL_PRICING } from "./models";
 import type { TokenUsage } from "./panelist";
 
 /**
- * Tracks cumulative USD spend for a panel run and enforces a hard cap. Mock models
- * (not in MODEL_PRICING) contribute $0, so offline runs never trip the cap.
+ * Tracks cumulative USD spend for a panel run and enforces a hard cap. Explicit mock: models contribute $0. Unknown live models fail closed; this
+ * report estimate complements the durable reservation ledger.
  */
 export class CostMeter {
   private spentUsd = 0;
@@ -17,9 +17,10 @@ export class CostMeter {
 
   add(modelId: string, usage: TokenUsage): void {
     const pricing = MODEL_PRICING[modelId];
-    if (!pricing) return; // unknown / mock model → no cost
+    if (!pricing) { if(modelId.startsWith("mock:")) return; throw Error("Unpriced model cannot enter a live cost report"); }
     this.spentUsd +=
-      (usage.inputTokens / 1_000_000) * pricing.inputPerM +
+      ((usage.inputTokens-(usage.cachedInputTokens??0)) / 1_000_000) * pricing.inputPerM +
+      ((usage.cachedInputTokens??0)/1_000_000)*pricing.cachedPerM +
       (usage.outputTokens / 1_000_000) * pricing.outputPerM;
   }
 

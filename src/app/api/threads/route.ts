@@ -1,22 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { listThreads, createThread } from "@/lib/db/threads";
-
-export async function GET() {
-  await requireUser();
-  const threads = await listThreads();
-  return NextResponse.json({ threads });
-}
-
-export async function POST(req: NextRequest) {
-  const user = await requireUser();
-  let title = "New thread";
-  try {
-    const body = await req.json();
-    if (typeof body?.title === "string" && body.title.trim()) title = body.title.trim();
-  } catch {
-    /* default title */
-  }
-  const thread = await createThread(user.id, title);
-  return NextResponse.json({ thread }, { status: 201 });
-}
+import {requireActor} from '@/lib/server/auth';
+import {json,readJson,route,text} from '@/lib/server/http';
+import {executionFor,runWithExecution} from '@/lib/server/execution';
+import {listThreads,createThread} from '@/lib/db/threads';
+import {userLimit} from '@/lib/server/security';
+export const GET=route(async(req:Request)=>{const actor=await requireActor(req);return runWithExecution(executionFor(actor),async()=>json({threads:await listThreads()}));});
+export const POST=route(async(req:Request)=>{const actor=await requireActor(req,{write:true});await userLimit(actor,'thread-create',20,3600);const body=await readJson(req,4096);return runWithExecution(executionFor(actor),async()=>json({thread:await createThread(actor.id,text(body.title??'New thread','Title',80))},201));});

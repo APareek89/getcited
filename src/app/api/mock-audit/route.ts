@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import {readJson,route} from "@/lib/server/http";
 import { InProcessPanelRunner, MemoryGeoStore } from "@/lib/geo";
 
 /**
@@ -12,13 +13,8 @@ const Body = z.object({
   competitors: z.array(z.string().trim().min(1).max(60)).min(1).max(4),
 });
 
-export async function POST(request: NextRequest) {
-  let json: unknown;
-  try {
-    json = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+export const POST=route(async function POST(request: NextRequest) {
+  const json = await readJson(request,4096);
   const parsed = Body.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
@@ -53,4 +49,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});
