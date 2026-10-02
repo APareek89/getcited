@@ -47,4 +47,14 @@ describe('the entire persisted prepared message', () => {
     expect(html).toContain('GEO Action Plan'); expect(html).toContain('Approve → add to Tracker');
     expect(html).not.toContain('NaN'); expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('shows the Tracker link rather than another approval when the server hydrates persisted approval', () => {
+    const messages = structuredClone(savedMessages);
+    const part = cards(messages).find(part => part.type === 'tool-build_plan')!;
+    part.output = {...part.output as Record<string, unknown>, approved: true};
+    const html = render(messages);
+    expect(html).toContain('In your Tracker');
+    expect(html).not.toContain('Approve → add to Tracker');
+    expect(transport.action).not.toHaveBeenCalled();
+  });
 });

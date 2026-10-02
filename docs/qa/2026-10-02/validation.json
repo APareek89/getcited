@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-02",
+  "baseline_commit": "73d6fbe1a8a4c6c2b1a194e417d595c907e48724",
+  "scope": "local_free_candidate",
+  "real_provider_calls": 0,
+  "deployed_by_worker": false,
+  "scenario_count": 111,
+  "tests": {
+    "native_vitest": 84,
+    "postgres_repository_checks": 24,
+    "sdk_postgres_fixture_cases": 2,
+    "compiled_http_assertions": 85,
+    "compiled_http_requests": 83
+  },
+  "production_build": "passed",
+  "typecheck": "passed",
+  "browser": "passed_scoped_checks; see browser-qa.json",
+  "network": "Local server and SDK fixture runners reject non-loopback network. SDK responses are explicit fixtures.",
+  "historical_receipts_preserved": true,
+  "matrix_validation": "passed: IDs/scenarios unique,12categories,SOD product,counts,CSV/JSON parity,evidence paths exist",
+  "new_source_files": [
+    "src/lib/client/latest-selection.test.ts",
+    "src/lib/client/latest-selection.ts"
+  ],
+  "tests_and_build_logs": "External worker receipts retained in _workstreams/app-fmea-20261002; reports list distinct scopes.",
+  "tracked_runtime_diff_sha256": "1b6f53a933b5845edc38b08e1d60870663c78cea6165a47446cc4522a1f0dbff",
+  "inventory_note": "Diff hash excludes untracked files; new source paths are listed separately. Exact source/archive identity is a later packaging gate.",
+  "release": "root image-only deployment verified; see aws-release.json"
+}

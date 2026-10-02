@@ -72,11 +72,12 @@ export function meteredFetch(spec:{provider:'openai'|'anthropic'|'google';model:
   const remaining=Math.min(45_000,ctx.deadlineMs-Date.now());if(remaining<1)throw Error('Request deadline expired');
   const signal=AbortSignal.any([req.signal,AbortSignal.timeout(remaining),...(ctx.signal?[ctx.signal]:[])]);
   const reservation=await reserve({provider:spec.provider,model:spec.model,kind:spec.kind||'generation',maximumUsd:((inputBytes+2048)*price.input+maxOutputTokens*price.output)/1e6,inputBytes,maxOutputTokens,shared:spec.shared});
-  let dispatched=false,recorded=false;
+  let dispatched=false,recorded=false,upstreamStatus:number|undefined;
   try {
    signal.throwIfAborted();await markDispatched(reservation.id);dispatched=true;
    const headers=new Headers(req.headers);headers.set('accept-encoding','identity');
    const response=await fetch(req.url,{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal});
+   upstreamStatus=response.status;
    const enc=response.headers.get('content-encoding');if(enc&&!['identity','gzip','deflate','br'].includes(enc.toLowerCase()))throw Error('Unsupported response encoding');
    const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let count=0;
    if(reader){try{for(;;){signal.throwIfAborted();const item=await reader.read();if(item.done)break;count+=item.value.byteLength;if(count>MAX_PROVIDER_BYTES)throw Error('Provider response exceeds limit');chunks.push(item.value);}}catch(e){await reader.cancel().catch(()=>{});throw e;}}
@@ -89,6 +90,7 @@ export function meteredFetch(spec:{provider:'openai'|'anthropic'|'google';model:
    // Node fetch has already decoded compressed responses. Never forward stale encoding/length.
    return new Response(bytes,{status:response.status,headers:clean});
   } catch {
+   console.warn(JSON.stringify({event:'provider_failure',provider:spec.provider,model:spec.model,requestId:ctx.operationId,upstreamStatus,errorClass:upstreamStatus&&upstreamStatus>=400?'provider_rejected':'transport_or_response_failure'}));
    if(!recorded){if(dispatched)await markUncertain(reservation.id,{errorClass:'transport_unknown'});else await releaseUndispatched(reservation.id);}
    throw Error(dispatched?'Provider request did not complete. Usage may have been incurred; no automatic retry.':'Provider dispatch was denied.');
   }

@@ -1,5 +1,6 @@
 import "server-only";
-import {and,eq,desc,asc,sql} from "drizzle-orm";
+import {and,eq,desc,asc,sql,inArray} from "drizzle-orm";
+import type {UIMessage} from 'ai';
 import {drizzleDatabase,schema,ownerId} from "./client";
 import {repositoryOwner} from "../auth";
 import {HttpError} from "../server/http";
@@ -29,6 +30,20 @@ export interface TrackerItemView {
 
 
 function mapItem(r:typeof schema.trackerItems.$inferSelect):TrackerItemView{return {...r,status:r.status as TrackerStatus,updatedAt:r.updatedAt.toISOString()};}
+/** Read-time projection: the tracker, not a historical chat snapshot, owns approval state. */
+export async function hydratePlanApprovals(messages:UIMessage[]):Promise<UIMessage[]>{
+ const owner=await repositoryOwner();
+ const planOutput=(part:UIMessage['parts'][number])=>{
+  if(part.type!=='tool-build_plan'||part.state!=='output-available'||!part.output||typeof part.output!=='object')return null;
+  const output=part.output as Record<string,unknown>;
+  return typeof output.plan_id==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(output.plan_id)?output:null;
+ };
+ const ids=[...new Set(messages.flatMap(m=>m.parts.map(planOutput).filter(x=>x!==null).map(x=>ownerId(x.plan_id))))];
+ if(!ids.length)return messages;
+ const db=await drizzleDatabase();
+ const tracked=new Set((await db.selectDistinct({planId:schema.trackerItems.planId}).from(schema.trackerItems).where(and(eq(schema.trackerItems.userId,owner),inArray(schema.trackerItems.planId,ids)))).map(r=>r.planId));
+ return messages.map(m=>({...m,parts:m.parts.map(part=>{const output=planOutput(part);return output?{...part,output:{...output,approved:tracked.has(ownerId(output.plan_id))}}:part;})})) as UIMessage[];
+}
 export async function approvePlanToTracker(userId:string,plan:PlanView):Promise<{created:number;alreadyApproved:boolean}>{
  const owner=await repositoryOwner(userId),db=await drizzleDatabase();return db.transaction(async tx=>{
  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerId(plan.id)},91094))`);

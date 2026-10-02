@@ -7,7 +7,7 @@ import {createThread,getThread,saveThreadMessages,getThreadMessages,deleteThread
 import {getStoredProviderKeys,storeEncryptedKey,listStoredProviders} from '../src/lib/db/api-keys';
 import {PostgresGeoStore} from '../src/lib/db/geo-store';
 import {getPlanById} from '../src/lib/db/plans';
-import {approvePlanToTracker,listTrackerItems,updateTrackerItem} from '../src/lib/db/tracker';
+import {approvePlanToTracker,listTrackerItems,updateTrackerItem,hydratePlanApprovals} from '../src/lib/db/tracker';
 import {createExample} from '../src/lib/server/examples';
 import {reserve,markDispatched,settle,releaseUndispatched,markUncertain,acquireCapacity} from '../src/lib/server/usage';
 import {registerClient,issueCode,consumeCode,signAccessToken,verifyMcpToken} from '../src/lib/mcp/auth';
@@ -48,6 +48,14 @@ async function main(){
  }));
  await check('prepared report plan and messages are private and immutable',async()=>{await runWithExecution(b,async()=>{assert.equal(await new PostgresGeoStore(b.ownerId).getReport(sample.runId),null);assert.equal(await getPlanById(sample.planId),null);await assert.rejects(()=>getThreadMessages(sample.threadId));});await runWithExecution(a,async()=>{await assert.rejects(()=>saveThreadMessages(a.ownerId,sample.threadId,[]));await assert.rejects(()=>deleteThread(sample.threadId));});});
  await check('explicit concurrent plan approval uses persisted roadmap once',()=>runWithExecution(a,async()=>{const p=(await getPlanById(sample.planId))!;const r=await Promise.all([approvePlanToTracker(a.ownerId,{...p,roadmap:[]}),approvePlanToTracker(a.ownerId,p)]);assert.equal(r.filter(x=>x.alreadyApproved).length,1);assert.ok((await listTrackerItems(p.id)).length>0);const item=(await listTrackerItems(p.id))[0];await runWithExecution(b,()=>assert.rejects(()=>updateTrackerItem(item.id,{status:'done'})));}));
+ await check('thread reload hydrates approval from owned tracker without rewriting saved messages or revealing another owner',()=>runWithExecution(a,async()=>{
+  const saved=await getThreadMessages(sample.threadId),before=JSON.stringify(saved);
+  const approved=(messages:typeof saved)=>(messages[1].parts.find(p=>p.type==='tool-build_plan') as {output:{approved?:boolean}}).output.approved;
+  assert.equal(approved(saved),undefined);
+  assert.equal(approved(await hydratePlanApprovals(saved)),true);
+  assert.equal(approved(await runWithExecution(b,()=>hydratePlanApprovals(saved))),false);
+  assert.equal(JSON.stringify(saved),before);assert.equal(JSON.stringify(await getThreadMessages(sample.threadId)),before);
+ }));
  await check('session CSRF rejects malformed and different session tokens',()=>{const t=csrfToken(null,a.sessionId);assert.ok(validCsrf(t,a.sessionId));assert.equal(validCsrf(t,b.sessionId),false);assert.equal(validCsrf(t.split('.').slice(0,-1).join('.')+'.'+'é'.repeat(43),a.sessionId),false);});
  await check('quota cap rejects before any ledger mutation',()=>runWithExecution(a,async()=>{const before=(await query('select count(*)::int n from getcited_usage')).rows[0].n;await assert.rejects(()=>reserve({...quote,maximumUsd:0.3}));assert.equal((await query('select count(*)::int n from getcited_usage')).rows[0].n,before);}));
  await check('revocation before dispatch releases reserved capacity without charge',async()=>{const c=await actor();await runWithExecution(c,async()=>{const {id}=await reserve(quote);await query('update getcited_sessions set revoked_at=now() where id=$1',[c.sessionId]);await assert.rejects(()=>markDispatched(id));assert.equal((await query('select status from getcited_usage where id=$1',[id])).rows[0].status,'released');});});

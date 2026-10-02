@@ -1,3 +1,9 @@
+## FMEA correction — 2 October 2026, deployed
+
+Runtime source is frozen after 111 scenarios across 12 categories; this is not 111 defects. Six grouped changes fix attachment read races, duplicate brand scoring, unknown provider completion acceptance, missing safe provider diagnostics, persisted approval readback and an unsupported exact-cost claim. [Report and matrix](docs/qa/2026-10-02/report.md).
+
+Passed: 84 native tests, 24 actual PostgreSQL checks, 2 SDK/PG fixtures, 85 compiled Auth.js assertions over 83 requests, TypeScript and isolated production build. Zero real provider calls. Prepared cards now reload `In your Tracker` from owner-scoped persisted rows. Keyless normal-auth preview: 9002. Root verified screenshots and activated image `df4bf73221d6` with auth on/mock off and existing runtime configuration preserved; see `docs/qa/2026-10-02/aws-release.json`. Source commit is authorized after the staged secret scan. No new provider calls; earlier launch receipts below remain history.
+
 ## GEO chat recovery correction — local acceptance, deployment pending
 
 The user reported an interrupted configured GEO Agent. The actual compiled chat fixture confirmed a separate persistence bug: missing server-generated assistant IDs allowed one empty ID, then rejected the next reply as a duplicate. The fix creates UUIDs, gives existing empty IDs a stable owned-row fallback, checkpoints the incoming turn before generation and marks unfinished tools as interrupted. Captured final persistence still rejects revoked/expired sessions. Message/attachment preflight matches the 16 KiB server bound; safe errors and business conflicts no longer masquerade as account changes; free-example copy is scoped to that button.

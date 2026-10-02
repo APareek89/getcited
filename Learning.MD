@@ -158,3 +158,12 @@ comma-list safe; middleware-importable). Rewired: authorize login redirect, auth
 (all 3 redirects), signout, middleware /login redirect. lib/mcp/auth.ts re-exports it.
 **Watch for later:** NEVER build an absolute same-origin URL from request.url/req.nextUrl
 in server code — always publicOrigin(). Relative paths in ?next= params are fine.
+
+## 2 October 2026 — failure boundaries and saved approval
+
+- Slow FileReader callbacks had no selection fence; add generation checks and invalidate on remove/send/thread change. Native race tests cover the transitions.
+- Scoring accepted duplicate case/space brand entries; normalize the tracked set before calculating shares.
+- A provider response with unknown finish status could be accepted. Require explicit successful completion after usage settlement, with no automatic retry. Record only bounded failure metadata.
+- The plan card held approval only in React state, so reload offered approval again despite persisted Tracker rows. Hydrate the thread DTO from current owned rows; keep the historical messages immutable. PostgreSQL + server-render + compiled HTTP regressions cover it.
+- Metered costs use configured prices and sometimes uncertainty; removed the landing-page exact-cost promise. Encrypted key opt-in remains supported.
+- FMEA scenario count 111, grouped changes 6. Actual provider quality, the historical cancellation trigger and hosted load remain unverified. Full evidence: `docs/qa/2026-10-02/`.

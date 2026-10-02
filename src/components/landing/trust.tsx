@@ -151,7 +151,7 @@ export function KeyCustody() {
           <ul className="mt-5 space-y-3">
             {[
               "Start measuring immediately — no provider accounts, no key management.",
-              "Panel costs are metered transparently — every run reports its exact cost, and a hard per-run cost ceiling is enforced.",
+              "Panel costs use provider usage and our configured rates. Requests reserve budget before dispatch; missing usage stays marked uncertain instead of appearing free.",
               "Best for teams who want answers this week, not an integration project.",
             ].map((f) => (
               <li key={f} className="flex gap-2.5 text-sm text-muted-foreground">

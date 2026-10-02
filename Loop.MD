@@ -1,6 +1,7 @@
 # Loop.MD — GetCited
 status: on
 <!-- 2026-07-17 later: user granted a $2 paid-eval budget for this session; 3 paid confirmations run (journal below), ~$0.05 spent. Standing constraint returns to free-only unless re-granted.
+Current 2 October FMEA candidate: use `docs/qa/2026-10-02/report.md` for exact free-check counts and remaining release gates. No new paid authorization is inferred; local previews are9002 (GetCited) and9004 (Market Research).
 <!-- Turned ON 2026-07-17 (user: "free evals only, no API calls"). Constraint: the loop
      runs typecheck/lint/vitest + the evals below ONLY via mock mode / pure functions /
      code inspection — never a real LLM, crawl, or other paid/API call. Evals needing a

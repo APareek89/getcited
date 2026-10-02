@@ -1,0 +1,19 @@
+{
+  "status": "image_only_update_verified",
+  "app": "getcited",
+  "image": "sha256:df4bf73221d6ac06fee57855f4d1576590e8522626b5d1f5325ad1b4b877d6a8",
+  "image_id": "sha256:df4bf73221d6ac06fee57855f4d1576590e8522626b5d1f5325ad1b4b877d6a8",
+  "previous_image_id": "sha256:9f328aa86ff0cf0e4a4cddec82b15e442cdc4de03713f254064c5b7fdaa2731e",
+  "config_before_sha256": "d94381163dd01f7cae5c88c25f1fb80c095b22255aa4c2cad42d0aa22cc094f5",
+  "config_after_sha256": "7f6eac2a893384983f81d426f4f77983f4f031022a401460f5491f5bd227bb3a",
+  "source_sha256": "72b7143f1580fd19b1ca94844a26adc21901091ad683d724ccdcde983669df3e",
+  "config_preserved_except_image": true,
+  "environment_identical": true,
+  "mounts_identical": true,
+  "bounds_identical": true,
+  "other_apps_unchanged": true,
+  "auth": true,
+  "mock": false,
+  "provider_calls": 0,
+  "generated_at": "2026-10-02T08:41:31.821379+00:00"
+}

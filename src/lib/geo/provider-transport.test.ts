@@ -7,6 +7,7 @@ const state=vi.hoisted(()=>({mode:'live',deadlineMs:Date.now()+120000,dispatch:0
 vi.mock('@/lib/server/execution',()=>({requireExecution:()=>({mode:state.mode,deadlineMs:state.deadlineMs})}));
 vi.mock('@/lib/server/usage',()=>({reserve:vi.fn(async()=>{state.reserved++;return{id:'fixture'};}),markDispatched:vi.fn(async()=>{state.dispatch++;}),settle:vi.fn(async(_id,v)=>{state.settled.push(v);}),releaseUndispatched:vi.fn(),markUncertain:vi.fn(async()=>{state.uncertain++;})}));
 import {modelFor} from './providers';
+import {createRealPanelist} from './panelist';
 import {meteredFetch,MAX_PROVIDER_BYTES,responseUsage} from './provider-transport';
 import {isPublicAddress,publicUrl} from './safe-network';
 const wire=(text='Ready')=>({id:'fixture-response',object:'chat.completion',created:1,model:'gpt-4o-mini-2024-07-18',choices:[{index:0,message:{role:'assistant',content:text},finish_reason:'stop'}],usage:{prompt_tokens:12,completion_tokens:3,prompt_tokens_details:{cached_tokens:2}}});
@@ -14,6 +15,18 @@ const realFetch=globalThis.fetch;
 beforeEach(()=>{state.mode='live';state.deadlineMs=Date.now()+120000;state.dispatch=state.uncertain=state.reserved=0;state.settled=[];});
 afterEach(()=>{vi.unstubAllGlobals();});
 describe('bounded metered SDK transport',()=>{
+ it('logs only bounded provider metadata on HTTP rejection',async()=>{
+  const log=vi.spyOn(console,'warn').mockImplementation(()=>{});vi.stubGlobal('fetch',async()=>Response.json({error:{message:'private prompt and key'}},{status:401}));
+  try{await expect(generateText({model:modelFor('gpt-4o-mini',{openai:'secret-fixture'}),prompt:'private prompt',maxOutputTokens:64,maxRetries:0})).rejects.toThrow();
+   expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({event:'provider_failure',provider:'openai',upstreamStatus:401,errorClass:'provider_rejected'});expect(JSON.stringify(log.mock.calls)).not.toMatch(/secret-fixture|private prompt|key/);
+  }finally{log.mockRestore();}
+ });
+ it('does not save a benchmark answer with an unknown completion status after settling known usage',async()=>{
+  const response=wire('Acme is mentioned');response.choices[0].finish_reason='unexpected';
+  const send=vi.fn(async()=>Response.json(response));vi.stubGlobal('fetch',send);
+  await expect(createRealPanelist('openai',{openai:'synthetic-fixture',shared:true}).ask('Which tools?')).rejects.toThrow('incomplete');
+  expect(send).toHaveBeenCalledTimes(1);expect(state.settled).toHaveLength(1);expect(state.uncertain).toBe(0);
+ });
  it('actual SDK consumes compressed provider response once and settles returned model before return',async()=>{
   const server=createServer((_req,res)=>{res.writeHead(200,{'content-type':'application/json','content-encoding':'gzip'});res.end(gzipSync(JSON.stringify(wire())));});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
   const address=server.address() as {port:number};const seen:unknown[]=[];

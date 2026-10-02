@@ -24,11 +24,15 @@ export interface ScoringResult {
  * - per-prompt: which brands appeared + the competitor mentioned most often.
  */
 export function computeShareOfVoice(input: ScoringInput): ScoringResult {
-  const tracked = [input.brand, ...input.competitors];
+  // Old saved configurations can contain a repeated brand or case variant.
+  // Keep its first spelling once so the denominator and rendered rows agree.
+  const tracked = [...new Map([input.brand, ...input.competitors].map(b => [b.trim().toLowerCase(), b.trim()])).keys()]
+    .map(key => [input.brand, ...input.competitors].find(b => b.trim().toLowerCase() === key)!.trim());
+  const competitors = tracked.filter(b => b.toLowerCase() !== input.brand.trim().toLowerCase());
   const mentionCounts = new Map<string, number>(tracked.map((b) => [b, 0]));
 
   const byLower = new Map(tracked.map((b) => [b.toLowerCase(), b]));
-  const countMention = (raw: string): string | null => byLower.get(raw.toLowerCase()) ?? null;
+  const countMention = (raw: string): string | null => byLower.get(raw.trim().toLowerCase()) ?? null;
 
   for (const answer of input.answers) {
     const seen = new Set<string>();
@@ -57,7 +61,7 @@ export function computeShareOfVoice(input: ScoringInput): ScoringResult {
   const perPrompt: PerPromptEntry[] = [];
   for (const [prompt, group] of promptGroups) {
     const mentionedSet = new Set<string>();
-    const compCounts = new Map<string, number>(input.competitors.map((c) => [c, 0]));
+    const compCounts = new Map<string, number>(competitors.map((c) => [c, 0]));
     for (const answer of group) {
       const seen = new Set<string>();
       for (const m of answer.mentions) {

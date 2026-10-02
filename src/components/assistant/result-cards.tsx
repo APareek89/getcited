@@ -115,6 +115,7 @@ interface RoadmapOverviewWeek {
 
 export interface PlanOutput {
   prepared?: boolean;
+  approved?: boolean;
   plan_id: string;
   budget_usd: number;
   team_size: number;
@@ -254,7 +255,7 @@ export function PlanResult({ data }: { data: PlanOutput }) {
 
       {/* Actions: approve is primary, downloads sit beside it */}
       <div className="flex flex-wrap items-center gap-2 border-t border-border bg-secondary px-4 py-3">
-        <ApproveButton planId={data.plan_id} />
+        <ApproveButton key={data.plan_id} planId={data.plan_id} initiallyApproved={data.approved === true} />
         <span className="mx-1 hidden h-5 w-px bg-secondary sm:block" />
         <DownloadBtn planId={data.plan_id} format="docx" icon={FileText} label="Word" title="Full detail: WHAT/WHY/HOW/WHO + dates" />
         <DownloadBtn planId={data.plan_id} format="pdf" icon={FileType} label="PDF" />
@@ -341,7 +342,7 @@ export function PlanResult({ data }: { data: PlanOutput }) {
   );
 }
 
-function ApproveButton({ planId }: { planId: string }) {
+function ApproveButton({ planId, initiallyApproved = false }: { planId: string; initiallyApproved?: boolean }) {
   const requests = useRequests();
   const [pending, startTransition] = useTransition();
   const [approved, setApproved] = useState(false);
@@ -367,7 +368,7 @@ function ApproveButton({ planId }: { planId: string }) {
     });
   }
 
-  if (approved) {
+  if (approved || initiallyApproved) {
     return (
       <Link
         href="/tracker"

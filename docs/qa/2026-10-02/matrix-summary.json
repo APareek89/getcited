@@ -1,0 +1,35 @@
+{
+  "scenario_count": 111,
+  "category_counts": {
+    "unhandled_error_paths": 9,
+    "external_dependency_failures": 9,
+    "race_conditions_and_state": 10,
+    "resource_exhaustion": 9,
+    "security_access_control": 9,
+    "data_integrity_partial_writes": 10,
+    "observability_gaps": 10,
+    "scale_and_load_failures": 9,
+    "billing_credit_mismatches": 9,
+    "retry_idempotency_issues": 9,
+    "config_feature_flag_drift": 9,
+    "edge_cases_from_prd": 9
+  },
+  "status_counts": {
+    "controlled": 93,
+    "fixed": 9,
+    "product_limit": 3,
+    "historical_limit": 1,
+    "residual_risk": 3,
+    "unverified": 2
+  },
+  "evidence_counts": {
+    "source_inspection": 41,
+    "automated": 66,
+    "not_run": 4
+  },
+  "priority_counts": {
+    "P2": 97,
+    "P1": 13,
+    "P0": 1
+  }
+}

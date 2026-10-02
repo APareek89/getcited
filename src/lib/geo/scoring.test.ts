@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { computeShareOfVoice } from "./scoring";
 
 describe("computeShareOfVoice", () => {
+  it('deduplicates old case/space variants so repeated rows cannot inflate share', () => {
+    const r=computeShareOfVoice({brand:'Acme',competitors:['Acme',' ACME ','Rival','rival'],answers:[{prompt:'q',mentions:['acme',' RIVAL ']}]});
+    expect(r.shareOfVoice).toEqual([{brand:'Acme',mentions:1,sov:.5},{brand:'Rival',mentions:1,sov:.5}]);
+    expect(r.perPrompt[0].top_competitor).toBe('Rival');
+  });
   it("counts each brand at most once per answer and normalizes SoV to sum 1", () => {
     const res = computeShareOfVoice({
       brand: "PixelBin",

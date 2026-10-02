@@ -53,7 +53,7 @@ export function createRealPanelist(id: PanelistId, keys: ProviderKeys, maxOutput
         maxRetries: 0,
         experimental_telemetry: { isEnabled: false, functionId: `panelist.${id}` },
       });
-      if (["length","content-filter","error"].includes(res.finishReason) || !res.text.trim()) throw Error("Provider returned incomplete or refused text; usage was recorded and no retry was made.");
+      if (res.finishReason !== "stop" || !res.text.trim()) throw Error("Provider returned incomplete or refused text; usage was recorded and no retry was made.");
       // Web-grounded providers (Perplexity sonar) return the ACTUAL cited pages as
       // sources — the evidence the plan is built on. Don't rely on text regex alone.
       const sources = (res.sources ?? [])

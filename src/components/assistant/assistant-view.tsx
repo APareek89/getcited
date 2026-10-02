@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { userMessage, chatErrorMessage, MESSAGE_TOO_LARGE, INTERRUPTED_RESPONSE } from "@/lib/chat-recovery";
+import { latestSelection } from "@/lib/client/latest-selection";
 import { fenceResponse, StaleResponse } from "@/lib/client/identity";
 import { useAccount, useRequests } from "@/components/account/account-provider";
 import { ExampleButton } from "@/components/account/example-button";
@@ -88,6 +89,8 @@ export function AssistantView() {
   const selection = useRef(0);
   const lastThreadKey = LAST_THREAD_KEY + ":" + requests.ownerId;
   const readers = useRef(new Set<FileReader>());
+  const [attachmentSelection] = useState(() => latestSelection<{name:string;text:string}>());
+  const [readingAttachment, setReadingAttachment] = useState(false);
   const [input, setInput] = useState("");
   const [responseError, setResponseError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -113,14 +116,14 @@ export function AssistantView() {
     setThreads(data.threads ?? []); return data.threads ?? [];
   }, [requests]);
   const openThread = useCallback(async (id: string) => {
-    const serial = ++selection.current; void stop(); setMessages([]); setThreadId(id); setPrepared(false); setResponseError(null); setInput(''); setAttachment(null); setSelected(new Set());
+    const serial = ++selection.current; void stop(); setMessages([]); setThreadId(id); setPrepared(false); setResponseError(null); setInput(''); attachmentSelection.next(); setReadingAttachment(false); setAttachment(null); setSelected(new Set());
     try {
       const data = await requests.request<{thread?: {prepared?:boolean}; messages: any[]; prepared?:boolean}>(`/api/threads/${encodeURIComponent(id)}`);
       if (serial !== selection.current) return;
       setMessages(data.messages ?? []); setPrepared(Boolean(data.thread?.prepared ?? data.prepared));
       localStorage.setItem(lastThreadKey, id);
     } catch { if (serial === selection.current) toast.error('This conversation could not be opened. Please retry.'); }
-  }, [setMessages, stop, lastThreadKey, requests]);
+  }, [setMessages, stop, lastThreadKey, requests, attachmentSelection]);
   useEffect(() => {
     let active = true;
     // Restoration reads an external server store; state updates occur after that request.
@@ -142,7 +145,7 @@ export function AssistantView() {
   }
   async function newThread() {
     selection.current++; void stop(); setThreadId(null); setPrepared(false); setResponseError(null); localStorage.removeItem(lastThreadKey);
-    setMessages([]); setSelected(new Set()); setInput(''); setAttachment(null);
+    setMessages([]); setSelected(new Set()); setInput(''); attachmentSelection.next(); setReadingAttachment(false); setAttachment(null);
   }
   async function deleteThreadById(id: string) {
     try { await requests.request(`/api/threads/${encodeURIComponent(id)}`, 'DELETE'); if (id === threadId) await newThread(); await refreshThreads(); }
@@ -150,18 +153,19 @@ export function AssistantView() {
   }
   async function send(text: string) {
     const t = text.trim();
-    if (!t || busy || prepared) return;
+    const selectedFile = attachmentSelection.snapshot();
+    if (!t || busy || prepared || selectedFile.reading) return;
     const ticket = requests.capture(); const selectedThread = selection.current;
     let message;
-    try { message=userMessage(crypto.randomUUID(),t,attachment); }
+    try { message=userMessage(crypto.randomUUID(),t,selectedFile.value); }
     catch { toast.error(MESSAGE_TOO_LARGE); return; }
     let tid: string;
     try { tid = await ensureThread(t, selectedThread); } catch { if (requests.current(ticket)) toast.error("Conversation could not be saved. Please retry."); return; }
-    if (!requests.current(ticket) || selectedThread !== selection.current) return;
+    if (!requests.current(ticket) || selectedThread !== selection.current || !attachmentSelection.current(selectedFile.generation)) return;
     const sessionKeys = getSessionKeys(requests.ownerId!);
     const body: Record<string, unknown> = { model, threadId: tid ?? undefined };
     if (Object.keys(sessionKeys).length > 0) body.keys = sessionKeys;
-    setResponseError(null); setAttachment(null);
+    setResponseError(null); attachmentSelection.next(); setReadingAttachment(false); setAttachment(null);
     void sendMessage(message, { body }).finally(() => { if (requests.current(ticket) && selectedThread === selection.current) void refreshThreads().catch(() => {}); });
     setInput("");
     setSelected(new Set());
@@ -188,21 +192,28 @@ export function AssistantView() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    attachmentSelection.next(); setAttachment(null); setReadingAttachment(false);
+    for (const reader of readers.current) reader.abort(); readers.current.clear();
     if (!/\.(md|txt|csv|json|html)$/i.test(file.name)) { toast.error("Choose a text file: md, txt, csv, json, or html."); return; }
     if (file.size > MAX_UPLOAD_BYTES) {
       toast.error("Attach up to 12 KiB of text. The complete message must fit within 16 KiB.");
       return;
     }
+    const picked = attachmentSelection.begin(); setReadingAttachment(true);
     const ticket = requests.capture(); const selectedThread = selection.current;
     const reader = new FileReader(); readers.current.add(reader);
-    reader.onloadend = () => readers.current.delete(reader);
+    const current = () => requests.current(ticket) && selectedThread === selection.current && attachmentSelection.current(picked);
+    reader.onloadend = () => { readers.current.delete(reader); if (current()) setReadingAttachment(false); };
     reader.onload = () => {
-      if (!requests.current(ticket) || selectedThread !== selection.current) return;
-      setAttachment({ name: file.name, text: String(reader.result ?? "").slice(0, MAX_UPLOAD_BYTES) });
+      if (!current()) return;
+      const value = { name: file.name, text: String(reader.result ?? "").slice(0, MAX_UPLOAD_BYTES) };
+      attachmentSelection.finish(picked,value); setAttachment(value);
       toast.success(`Attached ${file.name} — it will be included with your next message.`);
     };
-    reader.onerror = () => { if (requests.current(ticket) && selectedThread === selection.current) toast.error("File could not be read."); };
-    reader.readAsText(file);
+    reader.onerror = () => { if (current()) { attachmentSelection.finish(picked); toast.error("File could not be read."); } };
+    reader.onabort = () => { if (current()) attachmentSelection.finish(picked); };
+    try { reader.readAsText(file); }
+    catch { readers.current.delete(reader); if (current()) { attachmentSelection.finish(picked); setReadingAttachment(false); toast.error("File could not be read."); } }
   }
 
   function downloadMessage(m: any) {
@@ -329,11 +340,11 @@ export function AssistantView() {
 
                 {/* Composer: upload + textarea + model + send inside one surface */}
                 <div className="rounded-xl border border-border bg-card p-2">
-                  {attachment && (
+                  {(attachment || readingAttachment) && (
                     <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs">
                       <Paperclip className="h-3 w-3 text-primary" />
-                      <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
-                      <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment">
+                      <span role="status" className="min-w-0 flex-1 truncate">{readingAttachment ? "Reading attachment…" : attachment?.name}</span>
+                      <button type="button" onClick={() => { attachmentSelection.next(); setReadingAttachment(false); setAttachment(null); for (const reader of readers.current) reader.abort(); readers.current.clear(); }} aria-label="Remove attachment">
                         <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                       </button>
                     </div>
@@ -392,11 +403,11 @@ export function AssistantView() {
                         <Square className="h-3.5 w-3.5" /> Stop
                       </Button>
                     ) : selected.size > 0 ? (
-                      <Button type="button" size="sm" onClick={runSelected}>
+                      <Button type="button" size="sm" onClick={runSelected} disabled={readingAttachment || prepared}>
                         Go ({selected.size})
                       </Button>
                     ) : (
-                      <Button type="button" size="sm" onClick={() => send(input)} aria-label="Send message" disabled={!input.trim() || prepared}>
+                      <Button type="button" size="sm" onClick={() => send(input)} aria-label="Send message" disabled={!input.trim() || prepared || readingAttachment}>
                         <Send className="h-3.5 w-3.5" />
                       </Button>
                     )}
@@ -413,4 +424,3 @@ export function AssistantView() {
   );
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
-
